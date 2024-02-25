@@ -11,11 +11,16 @@ link_directories(/usr/local/cuda-10.2/targets/aarch64-linux/lib)
 include(CTest)
 enable_testing()
 
-add_executable(fishCenSV2 main.cpp)
+add_executable(fishCenSV2 main.cpp ${CMAKE_SOURCE_DIR}/libs/yolo/yolov8.cpp 
+                                   ${CMAKE_SOURCE_DIR}/libs/yolo/yolov8.hpp)
+
 target_link_libraries(fishCenSV2 ${OpenCV_LIBS}
                                         cudart
                                         nvinfer)
 
+target_include_directories(fishCenSV2 PRIVATE ${CMAKE_SOURCE_DIR}/libs/yolo)
+
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
+# target_compile_options(fishCenSV2 PRIVATE -O2 -march=armv8-a+crypto -mcpu=cortex-a57+crypto)
