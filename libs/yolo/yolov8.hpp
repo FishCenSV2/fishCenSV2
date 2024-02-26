@@ -11,6 +11,7 @@
 #include <NvInferRuntimeCommon.h>
 #include <opencv2/opencv.hpp>
 #include <cuda_runtime.h>
+#include <BYTETracker.h> //Needed for Object struct.
 
 
 class Logger : public nvinfer1::ILogger {
@@ -19,12 +20,6 @@ class Logger : public nvinfer1::ILogger {
         if (severity <= nvinfer1::ILogger::Severity::kWARNING)
             std::cout << msg << std::endl;
     }
-};
-
-struct BoundingBox {
-    cv::Rect rect;
-    int class_id;
-    float confidence;
 };
 
 class YoloV8 {
@@ -55,6 +50,6 @@ class YoloV8 {
         void init();
         cv::Mat preprocess(cv::Mat& image);
         void predict(cv::Mat& input); 
-        std::vector<BoundingBox> postprocess(float scale_factor);
+        std::vector<Object> postprocess(float scale_factor);
   
 };

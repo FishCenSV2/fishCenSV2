@@ -9,6 +9,7 @@
 #include <opencv2/videoio.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include "yolov8.hpp"
+#include "BYTETracker.h"
 
 using milliseconds = std::chrono::milliseconds;
 
@@ -33,7 +34,7 @@ int main() {
     std::string classes_file_path = "/home/nvidia/Desktop/fishCenSV2/coco-classes.txt";
     std::string engine_file_path = "/home/nvidia/Desktop/fishCenSV2/yolov8n.engine";
 
-    YoloV8 detector = YoloV8(classes_file_path,engine_file_path);
+    YoloV8 detector(classes_file_path,engine_file_path);
     detector.init();
 
     cv::Mat frame;
@@ -50,10 +51,12 @@ int main() {
         return -1;
     }
 
-    std::vector<BoundingBox> objects;
+    std::vector<Object> objects;
 
-    Timer timer = Timer();
-    Timer timer_total = Timer();
+    Timer timer = Timer();         //Timer for measuring different processes execution time
+    Timer timer_total = Timer();   //Timer for measuring total execution time
+
+    BYTETracker tracker(30,30);
 
     while(1) {
 
@@ -98,11 +101,33 @@ int main() {
 
         cv::copyMakeBorder(frame,frame, 80,80,0,0, CV_HAL_BORDER_CONSTANT, cv::Scalar(0,0,0));
 
-        for(auto &obj : objects) {
-            cv::rectangle(frame,obj.rect,cv::Scalar(255,0,0),2);
-            cv::putText(frame,detector.classes[obj.class_id],cv::Point(obj.rect.x,obj.rect.y-10),
-                    cv::FONT_HERSHEY_SIMPLEX,0.9,cv::Scalar(255,0,0),2);
+        timer.start();
+
+        std::vector<STrack> output_stracks = tracker.update(objects);
+
+        timer.end();
+
+        std::cout << "Tracker Time: " << timer.get_time<milliseconds>() <<"ms\n";
+
+        timer.start();
+
+        //Code directly grabbed from one of the ByteTrack TensorRT files.
+        //Some of this will be changed as I believe the way it is written
+        //it won't plot some boxes if they aren't "people"-sized. 
+        for(int i = 0; i < output_stracks.size(); i++) {
+            std::vector<float> tlwh = output_stracks[i].tlwh;
+            bool vertical = tlwh[2] / tlwh[3] > 1.6;
+            if(tlwh[2] * tlwh[3] > 20 && !vertical) {
+                cv::Scalar s = tracker.get_color(output_stracks[i].track_id);
+                cv::putText(frame, cv::format("%d", output_stracks[i].track_id), cv::Point(tlwh[0], tlwh[1]-5),
+                0, 0.6, cv::Scalar(0,0,255),2,cv::LINE_AA);
+                cv::rectangle(frame, cv::Rect(tlwh[0],tlwh[1],tlwh[2],tlwh[3]),s,2);
+            }
         }
+
+        timer.end();
+
+        std::cout << "Draw Time: " << timer.get_time<milliseconds>() <<"ms\n";
 
         cv::imshow("Live", frame);
 

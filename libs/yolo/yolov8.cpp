@@ -114,7 +114,6 @@ cv::Mat YoloV8::preprocess(cv::Mat& image) {
 void YoloV8::predict(cv::Mat& input) {
     cudaMemcpy(_buffers[_input_index], input.data, input.total() * input.elemSize(),cudaMemcpyHostToDevice);
 
-
     _context->executeV2(_buffers);
 
     cudaMemcpy(_output_data.get(), _buffers[_output_index], 
@@ -123,12 +122,10 @@ void YoloV8::predict(cv::Mat& input) {
         
 }
 
-std::vector<BoundingBox> YoloV8::postprocess(float scale_factor) {
-    std::vector<BoundingBox> objects;
+std::vector<Object> YoloV8::postprocess(float scale_factor) {
+    std::vector<Object> objects;
 
     cv::Mat data = cv::Mat(84,2100,CV_32F,_output_data.get());
-
-    // cv::Mat data_trans = data.t();
 
     for(int col = 0; col < 2100; col++) {
         float max = data.at<float>(4,col);
@@ -165,8 +162,8 @@ std::vector<BoundingBox> YoloV8::postprocess(float scale_factor) {
         int index = _indices[i];
         objects.emplace_back();
         objects[i].rect = _boxes[index];
-        objects[i].class_id = _class_ids[index];
-        objects[i].confidence = _confidences[index];
+        objects[i].label = _class_ids[index];
+        objects[i].prob = _confidences[index];
     }
     
     _indices.clear();
