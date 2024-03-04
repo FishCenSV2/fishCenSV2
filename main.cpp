@@ -4,6 +4,7 @@
 #include <vector>
 #include <fstream>
 #include <string>
+#include <unordered_map>
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/videoio.hpp>
@@ -11,13 +12,16 @@
 #include "yolov8.hpp"
 #include "BYTETracker.h"
 
-using milliseconds = std::chrono::milliseconds;
-
 class Timer {
     private:
         std::chrono::high_resolution_clock::time_point _start_time;
         std::chrono::high_resolution_clock::time_point _end_time;
     public:
+        using seconds = std::chrono::seconds;
+        using milliseconds = std::chrono::milliseconds;
+        using microseconds = std::chrono::microseconds;
+        using nanoseconds = std::chrono::nanoseconds;
+
         inline void start() noexcept {
             _start_time = std::chrono::high_resolution_clock::now();
         };
@@ -31,6 +35,7 @@ class Timer {
 };
 
 int main() {
+
     std::string classes_file_path = "/home/nvidia/Desktop/fishCenSV2/coco-classes.txt";
     std::string engine_file_path = "/home/nvidia/Desktop/fishCenSV2/yolov8n.engine";
 
@@ -58,6 +63,12 @@ int main() {
 
     BYTETracker tracker(30,30);
 
+    std::vector<STrack> output_stracks;
+    std::unordered_map<int, int> previous_pos; //Key = Track ID, Val = Previous Position
+
+    int left_count = 0;
+    int right_count = 0;
+
     while(1) {
 
         timer_total.start();
@@ -68,7 +79,7 @@ int main() {
 
         timer.end();
 
-        std::cout << "Read Time: " << timer.get_time<milliseconds>() <<"ms\n";
+        std::cout << "Read Time: " << timer.get_time<Timer::milliseconds>() <<"ms\n";
 
         if(frame.empty()) {
             std::cerr << "ERROR! Blank frame grabbed\n";
@@ -81,7 +92,7 @@ int main() {
 
         timer.end();
 
-        std::cout << "Preprocess Time: " << timer.get_time<milliseconds>() <<"ms\n";
+        std::cout << "Preprocess Time: " << timer.get_time<Timer::milliseconds>() <<"ms\n";
 
         timer.start();
 
@@ -89,7 +100,7 @@ int main() {
 
         timer.end();
 
-        std::cout << "Inference Time: " << timer.get_time<milliseconds>() <<"ms\n";
+        std::cout << "Inference Time: " << timer.get_time<Timer::milliseconds>() <<"ms\n";
 
         timer.start();
 
@@ -97,43 +108,75 @@ int main() {
 
         timer.end();
 
-        std::cout << "Postprocess Time: " << timer.get_time<milliseconds>() <<"ms\n";
+        std::cout << "Postprocess Time: " << timer.get_time<Timer::microseconds>()/1000.0 <<"ms\n";
 
         cv::copyMakeBorder(frame,frame, 80,80,0,0, CV_HAL_BORDER_CONSTANT, cv::Scalar(0,0,0));
 
         timer.start();
 
-        std::vector<STrack> output_stracks = tracker.update(objects);
+        output_stracks = tracker.update(objects);
 
         timer.end();
 
-        std::cout << "Tracker Time: " << timer.get_time<milliseconds>() <<"ms\n";
+        std::cout << "Tracker Time: " << timer.get_time<Timer::microseconds>()/1000.0 <<"ms\n";
 
         timer.start();
 
-        //Code directly grabbed from one of the ByteTrack TensorRT files.
-        //Some of this will be changed as I believe the way it is written
-        //it won't plot some boxes if they aren't "people"-sized. 
-        for(int i = 0; i < output_stracks.size(); i++) {
-            std::vector<float> tlwh = output_stracks[i].tlwh;
-            bool vertical = tlwh[2] / tlwh[3] > 1.6;
-            if(tlwh[2] * tlwh[3] > 20 && !vertical) {
+        if(output_stracks.size() > 0) {
+            
+            //Loop over all output tracks and check if they crossed the boundary.
+            //NOTE: Still need to add code to remove older track ids otherwise we
+            //      could get a memory leak. Current idea is to remove them after
+            //      a certain time duration.
+            for(int i = 0; i < output_stracks.size(); i++) {
+                int current_position = static_cast<int>(.5 *(output_stracks[i].tlbr[0] + output_stracks[i].tlbr[2]));
+                
+                //If track_id isn't in the map then add it.
+                if(previous_pos.count(output_stracks[i].track_id) == 0) {
+                    previous_pos[output_stracks[i].track_id] = current_position;
+                    continue;
+                }
+
+                else {
+                    int previous_position = previous_pos[output_stracks[i].track_id];
+
+                    if(current_position - previous_position > 0 && previous_position < 340 && current_position >= 340) {
+                        right_count++;
+                    }
+
+                    else if(current_position - previous_position < 0 && previous_position >= 340 && current_position < 340) {
+                        left_count++;
+                    }
+
+                    previous_pos[output_stracks[i].track_id] = current_position;
+                }
+
+                //Code below directly grabbed from one of the ByteTrack TensorRT files
+                std::vector<float> tlwh = output_stracks[i].tlwh;
+
                 cv::Scalar s = tracker.get_color(output_stracks[i].track_id);
-                cv::putText(frame, cv::format("%d", output_stracks[i].track_id), cv::Point(tlwh[0], tlwh[1]-5),
-                0, 0.6, cv::Scalar(0,0,255),2,cv::LINE_AA);
+                cv::putText(frame, cv::format("%s #%d", detector.classes[objects[i].label].c_str(),output_stracks[i].track_id), cv::Point(tlwh[0], tlwh[1]-5),
+                0, 0.6, cv::Scalar(0,0,255),1,cv::LINE_AA);
                 cv::rectangle(frame, cv::Rect(tlwh[0],tlwh[1],tlwh[2],tlwh[3]),s,2);
+                
             }
+
         }
+
+        cv::putText(frame,cv::format("Right Count = %d", right_count),cv::Point(30,30),0,1,cv::Scalar(255,255,255));
+        cv::putText(frame,cv::format("Left Count = %d", left_count),cv::Point(30,60),0,1,cv::Scalar(255,255,255));
+
+        cv::line(frame,cv::Point(319,0),cv::Point(319,639),cv::Scalar(0,255,0),3);
 
         timer.end();
 
-        std::cout << "Draw Time: " << timer.get_time<milliseconds>() <<"ms\n";
+        std::cout << "Draw Time: " << timer.get_time<Timer::microseconds>()/1000.0 <<"ms\n";
 
         cv::imshow("Live", frame);
 
         timer_total.end();
 
-        std::cout << "Total Time: " << timer_total.get_time<milliseconds>() <<"ms\n";
+        std::cout << "Total Time: " << timer_total.get_time<Timer::milliseconds>() <<"ms\n";
 
         if(cv::waitKey(1) >= 0) {
             break;

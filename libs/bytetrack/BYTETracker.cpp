@@ -222,6 +222,12 @@ vector<STrack> BYTETracker::update(const vector<Object>& objects)
 	{
 		this->removed_stracks.push_back(removed_stracks[i]);
 	}
+
+	//Fix to prevent memory leak. Unsure if this will negatively impact
+	//performance. Based on how Ultralytics dealt with it.
+	if(this->removed_stracks.size() > 1000) {
+		this->removed_stracks.erase(this->removed_stracks.begin(),this->removed_stracks.begin()+500);
+	}
 	
 	remove_duplicate_stracks(resa, resb, this->tracked_stracks, this->lost_stracks);
 

@@ -71,6 +71,8 @@ void YoloV8::init() {
     auto idims = _engine->getBindingDimensions(_input_index);
     auto odims = _engine->getBindingDimensions(_output_index);
 
+    _max_out_dim = 0;
+
     input_len = idims.d[1] * idims.d[2] * idims.d[3];
     output_len = 1;
 
@@ -84,12 +86,15 @@ void YoloV8::init() {
         }
 
         else {
+            if(dim > _max_out_dim) {
+                _max_out_dim = dim;
+            }
+
             output_len *= dim;
         }
     }
 
     nvinfer1::Dims4 inputDims = {1, idims.d[1], idims.d[2], idims.d[3]};
-    // nvinfer1::Dims4 outputDims = {1, odims.d[1], odims.d[2], odims.d[3]};
 
     //Required.
     _context->setBindingDimensions(_input_index, inputDims);
@@ -125,9 +130,9 @@ void YoloV8::predict(cv::Mat& input) {
 std::vector<Object> YoloV8::postprocess(float scale_factor) {
     std::vector<Object> objects;
 
-    cv::Mat data = cv::Mat(84,2100,CV_32F,_output_data.get());
+    cv::Mat data = cv::Mat(num_of_classes+4,_max_out_dim,CV_32F,_output_data.get());
 
-    for(int col = 0; col < 2100; col++) {
+    for(int col = 0; col < _max_out_dim; col++) {
         float max = data.at<float>(4,col);
         int max_index = 0;
         for (int i = 1; i < num_of_classes; i++) {
@@ -138,7 +143,7 @@ std::vector<Object> YoloV8::postprocess(float scale_factor) {
         }
 
         //Again hardcoded constant. This is the score threshold.
-        if(max > 0.5) {
+        if(max > _score_thresh) {
             float x = data.at<float>(0,col) * scale_factor;
             float y = data.at<float>(1,col) * scale_factor;
             float w = data.at<float>(2,col) * scale_factor;
@@ -156,7 +161,7 @@ std::vector<Object> YoloV8::postprocess(float scale_factor) {
     //NMS to remove duplicate bounding boxes.
     //Hard coded constant is the NMS threshold.
     //Pretty sure this is also the IOU threshold.
-    cv::dnn::NMSBoxes(_boxes,_confidences,0.5,0.8,_indices);
+    cv::dnn::NMSBoxes(_boxes,_confidences,_score_thresh,_nms_thresh,_indices);
 
     for (int i = 0; i < _indices.size(); i++) {
         int index = _indices[i];
