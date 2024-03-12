@@ -34,6 +34,9 @@ private:
 	double lapjv(const vector<vector<float> > &cost, vector<int> &rowsol, vector<int> &colsol, 
 		bool extend_cost = false, float cost_limit = LONG_MAX, bool return_cost = true);
 
+public:
+	vector<STrack> removed_stracks;
+
 private:
 
 	float track_thresh;
@@ -44,6 +47,5 @@ private:
 
 	vector<STrack> tracked_stracks;
 	vector<STrack> lost_stracks;
-	vector<STrack> removed_stracks;
 	byte_kalman::KalmanFilter kalman_filter;
 };

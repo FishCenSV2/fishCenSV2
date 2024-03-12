@@ -223,8 +223,14 @@ vector<STrack> BYTETracker::update(const vector<Object>& objects)
 		this->removed_stracks.push_back(removed_stracks[i]);
 	}
 
-	//Fix to prevent memory leak. Unsure if this will negatively impact
-	//performance. Based on how Ultralytics dealt with it.
+	/*
+	Fix to prevent memory leak. Unsure if this will negatively impact
+	performance. Based on how Ultralytics dealt with it.
+
+	NOTE: Technically our main function already takes care of this but this
+		  is kept here for consistency sakes. The library shouldn't rely on the
+		  user to take care of this outside of the class.
+	*/
 	if(this->removed_stracks.size() > 1000) {
 		this->removed_stracks.erase(this->removed_stracks.begin(),this->removed_stracks.begin()+500);
 	}

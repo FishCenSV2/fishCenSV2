@@ -65,6 +65,7 @@ void YoloV8::init() {
     _engine = std::unique_ptr<nvinfer1::ICudaEngine>(_runtime->deserializeCudaEngine(_engine_data.data(), _engine_data.size(), nullptr));
     _context = std::unique_ptr<nvinfer1::IExecutionContext>(_engine->createExecutionContext());
 
+    //These names can be found by viewing the model with Netron.
     _input_index = _engine->getBindingIndex("images");
     _output_index = _engine->getBindingIndex("output0");
 
@@ -142,7 +143,6 @@ std::vector<Object> YoloV8::postprocess(float scale_factor) {
             }
         }
 
-        //Again hardcoded constant. This is the score threshold.
         if(max > _score_thresh) {
             float x = data.at<float>(0,col) * scale_factor;
             float y = data.at<float>(1,col) * scale_factor;
@@ -159,8 +159,6 @@ std::vector<Object> YoloV8::postprocess(float scale_factor) {
     }
 
     //NMS to remove duplicate bounding boxes.
-    //Hard coded constant is the NMS threshold.
-    //Pretty sure this is also the IOU threshold.
     cv::dnn::NMSBoxes(_boxes,_confidences,_score_thresh,_nms_thresh,_indices);
 
     for (int i = 0; i < _indices.size(); i++) {

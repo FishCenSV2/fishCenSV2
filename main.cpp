@@ -4,13 +4,16 @@
 #include <vector>
 #include <fstream>
 #include <string>
+#include <cstdint>
 #include <unordered_map>
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/videoio.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include <boost/asio.hpp>
 #include "yolov8.hpp"
 #include "BYTETracker.h"
+#include "client.hpp"
 
 class Timer {
     private:
@@ -42,19 +45,19 @@ int main() {
     YoloV8 detector(classes_file_path,engine_file_path);
     detector.init();
 
-    cv::Mat frame;
-    cv::VideoCapture cap;
+    boost::asio::io_context io_context;
+    constexpr int height = 480;
+    constexpr int width = 640;
+    constexpr int color_channels = 3;
+    constexpr size_t buff_size = height * width * color_channels;
 
-    cap.open(1);
-    cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
-    cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
-    cap.set(cv::CAP_PROP_FPS, 30);
-    cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
+    std::vector<std::uint8_t> buff(buff_size);
+    unsigned request = 5; //Will later change to be an enum possibly.
 
-    if(!cap.isOpened()) {
-        std::cerr << "ERROR! Unable to open camera\n";
-        return -1;
-    }
+    //Might be possible that client connects before server can start?
+    //Need to investigate further.
+    Client client(io_context,"192.168.1.85",1234);
+    client.connect();
 
     std::vector<Object> objects;
 
@@ -75,16 +78,14 @@ int main() {
 
         timer.start();
 
-        cap.read(frame);
+        client.write(request);
+        client.read(buff);
+
+        cv::Mat frame = cv::Mat(height,width,CV_8UC3,buff.data());
 
         timer.end();
 
         std::cout << "Read Time: " << timer.get_time<Timer::milliseconds>() <<"ms\n";
-
-        if(frame.empty()) {
-            std::cerr << "ERROR! Blank frame grabbed\n";
-            break;
-        }
 
         timer.start();
 
@@ -125,9 +126,6 @@ int main() {
         if(output_stracks.size() > 0) {
             
             //Loop over all output tracks and check if they crossed the boundary.
-            //NOTE: Still need to add code to remove older track ids otherwise we
-            //      could get a memory leak. Current idea is to remove them after
-            //      a certain time duration.
             for(int i = 0; i < output_stracks.size(); i++) {
                 int current_position = static_cast<int>(.5 *(output_stracks[i].tlbr[0] + output_stracks[i].tlbr[2]));
                 
@@ -161,6 +159,25 @@ int main() {
                 
             }
 
+        }
+
+        //Loops over all removed tracks and removes corresponding track IDs 
+        //from the `previous_pos` map
+        if(tracker.removed_stracks.size() > 0) {
+
+            int temp_track_id = 0;
+
+            for (auto &i: tracker.removed_stracks) {
+
+                //For some reason the removed tracks vector can have duplicates
+                if(i.track_id != temp_track_id) {
+                    previous_pos.erase(i.track_id);
+                }
+
+                temp_track_id = i.track_id;
+            }
+
+            tracker.removed_stracks.clear();
         }
 
         cv::putText(frame,cv::format("Right Count = %d", right_count),cv::Point(30,30),0,1,cv::Scalar(255,255,255));
