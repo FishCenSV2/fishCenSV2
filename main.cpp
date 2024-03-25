@@ -45,26 +45,24 @@ int main() {
     YoloV8 detector(classes_file_path,engine_file_path);
     detector.init();
 
-    boost::asio::io_context io_context;
+    //Address is the Jetson's
+    const std::string pipeline = "udpsrc address=192.168.1.80 port=5000 ! application/x-rtp, payload=96, encoding-name=H264 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw, format=BGRx ! videoconvert ! video/x-raw, format=BGR ! appsink";
+
     constexpr int height = 480;
     constexpr int width = 640;
     constexpr int color_channels = 3;
+    constexpr int fps = 60;
     constexpr size_t buff_size = height * width * color_channels;
 
     std::vector<std::uint8_t> buff(buff_size);
     unsigned request = 5; //Will later change to be an enum possibly.
-
-    //Might be possible that client connects before server can start?
-    //Need to investigate further.
-    Client client(io_context,"192.168.1.85",1234);
-    client.connect();
 
     std::vector<Object> objects;
 
     Timer timer = Timer();         //Timer for measuring different processes execution time
     Timer timer_total = Timer();   //Timer for measuring total execution time
 
-    BYTETracker tracker(30,30);
+    BYTETracker tracker(fps,30);
 
     std::vector<STrack> output_stracks;
     std::unordered_map<int, int> previous_pos; //Key = Track ID, Val = Previous Position
@@ -72,20 +70,32 @@ int main() {
     int left_count = 0;
     int right_count = 0;
 
+    cv::VideoCapture cap;
+    cv::Mat frame;
+
+    if(!cap.open(pipeline, cv::CAP_GSTREAMER)) {
+        std::cerr << "ERROR! Unable to open camera\n";
+        return -1;
+    }
+
     while(1) {
 
         timer_total.start();
 
         timer.start();
 
-        client.write(request);
-        client.read(buff);
-
-        cv::Mat frame = cv::Mat(height,width,CV_8UC3,buff.data());
+        //Sometimes `reference in DPB was never decoded` appears
+        //This causes a massive delay and should be looked into further
+        cap.read(frame);
 
         timer.end();
 
-        std::cout << "Read Time: " << timer.get_time<Timer::milliseconds>() <<"ms\n";
+        std::cout << "Read Time: " << timer.get_time<Timer::microseconds>()/1000.0 <<"ms\n";
+
+        if(frame.empty()) {
+            std::cerr << "ERROR! Blank frame grabbed\n";
+            return -1;
+        }
 
         timer.start();
 
@@ -200,7 +210,6 @@ int main() {
         }
 
     }
-
 
     return 0;
 }
