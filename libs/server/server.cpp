@@ -18,10 +18,6 @@ void Server::stop() {
     _io_context.stop();
 }
 
-/** @brief Accepts incoming connection from client
-*
-* @return None
-*/
 void Server::do_accept() {
     _acceptor.async_accept([this](boost::system::error_code ec, tcp::socket socket) {
         if (!ec) {

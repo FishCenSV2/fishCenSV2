@@ -7,11 +7,26 @@
 
 using boost::asio::ip::tcp;
 
+/**
+*  
+* @brief An class that represents a session between the client and
+*        server. It runs based on an asynchronous callback model.
+*
+* A class which represents an active session between a client and
+* the server where the client sends a request and the server sends
+* back data containing the counts for each species.
+*
+* NOTE: The client only has to send any number for them to receive data.
+*       This will remain like this until other values like temperature
+*       is implemented.
+*
+* @author Tristan Huen
+*/
 class Session : public std::enable_shared_from_this<Session> {
 public:
 	std::vector<int> data_cpy;  ///< Copy of data to send to clients.
-	unsigned request;					 ///< Amount of elements received by server.
-	Server& server;						 ///< Reference to server object for copying image data.
+	unsigned request;		    ///< A request from the client to send data.
+	Server& server;			    ///< Reference to server object for copying image data.
 
 	/** @brief Constructor for Session.
 	*
@@ -37,7 +52,7 @@ private:
 	*/
 	void do_read();
 
-	/** @brief Writes image frame to client
+	/** @brief Writes counting data to client
 	*
 	* @return None
 	*/

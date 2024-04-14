@@ -21,7 +21,7 @@
 #include "client.hpp"
 #include "server.hpp"
 
-#define NO_PI //For testing with just a simple webcam.
+// #define NO_PI //For testing with just a simple webcam.
 
 bool end_program_flag = false;      //Not atomic since it does not mix well with cond_var.
 std::condition_variable cond_var;   //Condition variable for UDP queue.
@@ -55,7 +55,7 @@ void udp_stream() {
     using namespace boost;
 
     const std::string ip = "239.255.0.1"; //Multicast address.
-    unsigned port = 12345;
+    constexpr unsigned port = 12345;
     auto udp_ip = asio::ip::address::from_string(ip);
     constexpr int compression_factor = 80;
     std::vector<uint8_t> buff;
@@ -89,18 +89,17 @@ void udp_stream() {
 
 void main_loop(Server& server) {
 
+    //For some reason relative paths don't work
     std::string classes_file_path = "/home/nvidia/Desktop/fishCenSV2/coco-classes.txt";
     std::string engine_file_path = "/home/nvidia/Desktop/fishCenSV2/yolov8n.engine";
 
-    //Address is the Jetson's
-    const std::string pipeline = "udpsrc address=192.168.137.236 port=5000 ! application/x-rtp, payload=96, encoding-name=H264 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw, format=BGRx ! videoconvert ! video/x-raw, format=BGR, width=640, height=480 ! appsink";
+    //Address is the Jetson's. This should always be the same address as configured by the router.
+    const std::string pipeline = "udpsrc address=192.168.0.103 port=5000 ! application/x-rtp, payload=96, encoding-name=H264 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw, format=BGRx ! videoconvert ! video/x-raw, format=BGR, width=640, height=480 ! appsink";
 
-    constexpr int height = 480;
-    constexpr int width = 640;
-    constexpr int color_channels = 3;
-    constexpr int fps = 60;
-    constexpr size_t buff_size = height * width * color_channels;
+    constexpr int fps = 50;
 
+    //Right now it counts cellphones and anything else.
+    //Of course this will be changed once the model is trained.
     int left_count = 0;
     int l_cell_count = 0;
     int right_count = 0;
@@ -109,9 +108,9 @@ void main_loop(Server& server) {
     cv::VideoCapture cap;
     cv::Mat frame;
 
-    std::vector<Object> objects;
-    std::vector<STrack> output_stracks;
-    std::unordered_map<int, int> previous_pos; //Key = Track ID, Val = Previous Position
+    std::vector<Object> objects;                //Vector of bounding boxes
+    std::vector<STrack> output_stracks;         //Vector of tracked objects
+    std::unordered_map<int, int> previous_pos;  //Key = Track ID, Val = Previous Position
 
     Timer timer = Timer();         //Timer for measuring different processes execution time
     Timer timer_total = Timer();   //Timer for measuring total execution time

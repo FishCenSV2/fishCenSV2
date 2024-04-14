@@ -3,27 +3,14 @@
 
 using boost::asio::ip::tcp;
 
-/** @brief Constructor for Session.
-*
-* @param socket A socket object (note object is moved).
-* @return None
-*/
 Session::Session(tcp::socket socket, Server& server)
     : _socket(std::move(socket)), server(server) {
 }
 
-/** @brief Starts the session by calling do_read()
-*
-* @return None
-*/
 void Session::start() {
     do_read();
 }
 
-/** @brief Reads data from the client
-*
-* @return None
-*/
 void Session::do_read() {
 
     //Get shared pointer to Session object
@@ -32,7 +19,6 @@ void Session::do_read() {
     boost::asio::async_read(_socket, boost::asio::buffer(&request, sizeof(request)),
         [this, self](boost::system::error_code ec, std::size_t len) {
             if (!ec) {
-
                 do_write();
             }
 
@@ -43,10 +29,6 @@ void Session::do_read() {
    
 }
 
-/** @brief Writes image frame to client
-*
-* @return None
-*/
 void Session::do_write() {
 
     //Get shared pointer to Session object

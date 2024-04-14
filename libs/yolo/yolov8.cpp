@@ -4,11 +4,16 @@
 #include <opencv2/dnn/dnn.hpp>
 #include <opencv2/imgproc.hpp>
 
-std::vector<char> readEngineFile(const std::string& engineFileName) {
+/** @brief Reads the engine file using an absolute file path.
+*
+* @param engine_file_path Absolute file path to .engine file.
+* @return The raw binary of the engine file.
+*/
+std::vector<char> readEngineFile(const std::string& engine_file_path) {
     std::vector<char> engineData;
-    std::ifstream engineFile(engineFileName, std::ios::binary);
+    std::ifstream engineFile(engine_file_path, std::ios::binary);
     if(!engineFile.good()) {
-        std::cerr << "Error opening engine file: " << engineFileName << std::endl;
+        std::cerr << "Error opening engine file: " << engine_file_path << std::endl;
         exit(EXIT_FAILURE);
     }
 
@@ -23,9 +28,14 @@ std::vector<char> readEngineFile(const std::string& engineFileName) {
     return engineData;
 }
 
-std::vector<std::string> readClasses(const std::string& class_file) {
+/** @brief Reads the class .txt file using an absolute file path.
+*
+* @param class_file_path Absolute file path to .txt file.
+* @return A vector containing the class names.
+*/
+std::vector<std::string> readClasses(const std::string& class_file_path) {
     std::vector<std::string> classes;
-    std::ifstream infile(class_file, std::ios::in);
+    std::ifstream infile(class_file_path, std::ios::in);
 
     while(infile.good()) {
         std::string data;
@@ -56,16 +66,21 @@ YoloV8::YoloV8(const std::string& classes_file_path,
 }
 
 YoloV8::~YoloV8() {
+    //Some implementations might do this right after cudaMemCpy but that
+    //means also doing cudaMalloc everytime as well. I think this should
+    //be fine.
     cudaFree(_buffers[_input_index]);
     cudaFree(_buffers[_output_index]);
 }
 
 void YoloV8::init() {
+    //Ignore any deprecation warnings.
     _runtime = std::unique_ptr<nvinfer1::IRuntime>(nvinfer1::createInferRuntime(_logger));
     _engine = std::unique_ptr<nvinfer1::ICudaEngine>(_runtime->deserializeCudaEngine(_engine_data.data(), _engine_data.size(), nullptr));
     _context = std::unique_ptr<nvinfer1::IExecutionContext>(_engine->createExecutionContext());
 
     //These names can be found by viewing the model with Netron.
+    //Simply drag-and-drop the ONNX file (not the engine file) into it.
     _input_index = _engine->getBindingIndex("images");
     _output_index = _engine->getBindingIndex("output0");
 
@@ -77,6 +92,8 @@ void YoloV8::init() {
     input_len = idims.d[1] * idims.d[2] * idims.d[3];
     output_len = 1;
 
+    //Loop over the output dimensions and find the max output dimension
+    //as well as get the total number elements (output_len).
     for (auto &dim : odims.d) {
         if(dim < 0) {
             output_len *= 1;
@@ -97,7 +114,6 @@ void YoloV8::init() {
 
     nvinfer1::Dims4 inputDims = {1, idims.d[1], idims.d[2], idims.d[3]};
 
-    //Required.
     _context->setBindingDimensions(_input_index, inputDims);
 
     cudaMalloc(&_buffers[_input_index], input_len * sizeof(float));
@@ -110,9 +126,18 @@ void YoloV8::init() {
 cv::Mat YoloV8::preprocess(cv::Mat& image) {
     cv::Mat frame;
 
+    //The padding is hardcoded based on an input of 640*480 so it will just
+    //add 80 to the top and bottom of the the rows to make it 640*640
     cv::copyMakeBorder(image,frame, 80,80,0,0, CV_HAL_BORDER_CONSTANT, cv::Scalar(0,0,0));      
 
-    //TensorRT prefers NCHW but apparently OpenCV uses NHCW.
+    /*
+    TensorRT prefers NCHW but apparently OpenCV uses NHCW. We can use
+    this function to also do some other pre-processing like scaling
+    the input to be between 0 and 1 instead of 0 and 255.
+
+    NOTE: The cv::Size(320,320) is also hardcoded based on the model.
+          This should realistically be determined using idims.d 
+    */
     return cv::dnn::blobFromImage(frame,1.0/255,cv::Size(320,320),cv::Scalar(0,0,0),true,false,CV_32F);
 
 }
@@ -129,16 +154,22 @@ void YoloV8::predict(cv::Mat& input) {
 }
 
 std::vector<Object> YoloV8::postprocess(float scale_factor) {
-    std::vector<Object> objects;
 
-    cv::Mat data = cv::Mat(num_of_classes+4,_max_out_dim,CV_32F,_output_data.get());
+    constexpr int class_offset = 4; //The first four numbers are the xywh
+    std::vector<Object> objects;    //Final output vector for bounding boxes.
+
+    //The output is in dimensions of (# of classes + class_offset) * object_numbers
+    cv::Mat data = cv::Mat(num_of_classes+class_offset,_max_out_dim,CV_32F,_output_data.get());
 
     for(int col = 0; col < _max_out_dim; col++) {
         float max = data.at<float>(4,col);
         int max_index = 0;
+
+        //Find the row index in each column that has the highest number.
+        //This is equivalent to the probability score.
         for (int i = 1; i < num_of_classes; i++) {
-            if(max < data.at<float>(4+i,col)) {
-                max = data.at<float>(4+i,col);
+            if(max < data.at<float>(class_offset+i,col)) {
+                max = data.at<float>(class_offset+i,col);
                 max_index = i;
             }
         }
@@ -157,10 +188,14 @@ std::vector<Object> YoloV8::postprocess(float scale_factor) {
             _confidences.push_back(max);
         }
     }
-
-    //NMS to remove duplicate bounding boxes.
+    /*
+    NMS (Non-max-suppression) to remove duplicate bounding boxes.
+    The _indices vector will store all the indices that correspond to non-duplicate
+    boxes.
+    */
     cv::dnn::NMSBoxes(_boxes,_confidences,_score_thresh,_nms_thresh,_indices);
 
+    //Loop over all indices to only get the non-duplicates.
     for (int i = 0; i < _indices.size(); i++) {
         int index = _indices[i];
         objects.emplace_back();

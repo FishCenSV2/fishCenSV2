@@ -4,6 +4,14 @@
 
 using boost::asio::ip::tcp;
 
+/*
+NOTE: This code is not used at the moment. It was supposed to
+      be used for video streaming from the Pi but that is now
+      using rpicam-vid and gstreamer instead. This code remains here
+      in case any other kind of data needs to be retrieved from
+      the Pi      
+*/
+
 /**
 *
 * @brief Represents a user for connection to a server
