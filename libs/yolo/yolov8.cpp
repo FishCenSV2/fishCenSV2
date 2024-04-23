@@ -84,8 +84,8 @@ void YoloV8::init() {
     _input_index = _engine->getBindingIndex("images");
     _output_index = _engine->getBindingIndex("output0");
 
-    auto idims = _engine->getBindingDimensions(_input_index);
-    auto odims = _engine->getBindingDimensions(_output_index);
+    const auto idims = _engine->getBindingDimensions(_input_index);
+    const auto odims = _engine->getBindingDimensions(_output_index);
 
     _max_out_dim = 0;
 

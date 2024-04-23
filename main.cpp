@@ -11,6 +11,7 @@
 #include <thread>
 #include <queue>
 #include <string>
+#include <cmath>
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/videoio.hpp>
@@ -56,10 +57,10 @@ void udp_stream() {
 
     const std::string ip = "239.255.0.1"; //Multicast address.
     constexpr unsigned port = 12345;
-    auto udp_ip = asio::ip::address::from_string(ip);
+    const auto udp_ip = asio::ip::address::from_string(ip);
     constexpr int compression_factor = 80;
     std::vector<uint8_t> buff;
-    std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY,compression_factor};
+    const std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY,compression_factor};
 
     asio::io_service io_service;
     asio::ip::udp::socket socket(io_service);
@@ -90,11 +91,11 @@ void udp_stream() {
 void main_loop(Server& server) {
 
     //For some reason relative paths don't work
-    std::string classes_file_path = "/home/nvidia/Desktop/fishCenSV2/coco-classes.txt";
-    std::string engine_file_path = "/home/nvidia/Desktop/fishCenSV2/yolov8n.engine";
+    const std::string classes_file_path = "/home/nvidia/Desktop/fishCenSV2/coco-classes.txt";
+    const std::string engine_file_path = "/home/nvidia/Desktop/fishCenSV2/yolov8n.engine";
 
     //Address is the Jetson's. This should always be the same address as configured by the router.
-    const std::string pipeline = "udpsrc address=192.168.0.103 port=5000 ! application/x-rtp, payload=96, encoding-name=H264 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw, format=BGRx ! videoconvert ! video/x-raw, format=BGR, width=640, height=480 ! appsink";
+    const std::string pipeline = "udpsrc address=192.168.0.103 port=5000 ! application/x-rtp, payload=96, encoding-name=H264 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw, format=BGRx, width=640, height=480 ! videoconvert ! video/x-raw, format=BGR, width=640, height=480 ! appsink";
 
     constexpr int fps = 50;
 
@@ -116,6 +117,9 @@ void main_loop(Server& server) {
     Timer timer_total = Timer();   //Timer for measuring total execution time
 
     YoloV8 detector(classes_file_path,engine_file_path);
+
+    std::cout << "Initializing YoloV8 engine\n";
+
     detector.init();
 
     #ifdef NO_PI
@@ -211,7 +215,7 @@ void main_loop(Server& server) {
                 else {
                     int previous_position = previous_pos[output_stracks[i].track_id];
 
-                    if(current_position - previous_position > 0 && previous_position < 340 && current_position >= 340) {
+                    if(current_position - previous_position > 0 && previous_position < 320 && current_position >= 320) {
                         if(detector.classes[objects[i].label] == "cell phone") {
                             r_cell_count++;
                         }
@@ -222,7 +226,7 @@ void main_loop(Server& server) {
 
                     }
 
-                    else if(current_position - previous_position < 0 && previous_position >= 340 && current_position < 340) {
+                    else if(current_position - previous_position < 0 && previous_position >= 320 && current_position < 320) {
                         if(detector.classes[objects[i].label] == "cell phone") {
                             l_cell_count++;
                         }
@@ -237,9 +241,12 @@ void main_loop(Server& server) {
 
                 //Code below directly grabbed from one of the ByteTrack TensorRT files
                 std::vector<float> tlwh = output_stracks[i].tlwh;
+                float prob_score = objects[i].prob * 100;;
 
                 cv::Scalar s = tracker.get_color(output_stracks[i].track_id);
-                cv::putText(frame, cv::format("%s #%d", detector.classes[objects[i].label].c_str(),output_stracks[i].track_id), cv::Point(tlwh[0], tlwh[1]-5),
+                cv::putText(frame, cv::format("%s#%d", (detector.classes[objects[i].label]).c_str(),output_stracks[i].track_id), cv::Point(tlwh[0], tlwh[1]-24),
+                0, 0.6, cv::Scalar(0,0,255),1,cv::LINE_AA);
+                cv::putText(frame, cv::format("%.2f%s",prob_score,"%"), cv::Point(tlwh[0], tlwh[1]-5),
                 0, 0.6, cv::Scalar(0,0,255),1,cv::LINE_AA);
                 cv::rectangle(frame, cv::Rect(tlwh[0],tlwh[1],tlwh[2],tlwh[3]),s,2);
                 
@@ -289,6 +296,7 @@ void main_loop(Server& server) {
             frame_queue.push(frame);
         }
 
+        //Notify UDP thread
         cond_var.notify_one();
 
         timer_total.end();
