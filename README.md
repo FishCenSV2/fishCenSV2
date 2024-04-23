@@ -1,19 +1,48 @@
 # fishCenSV2
 A fish-counting and identifier system using machine learning that can be used to track salmon as they swim upstream creeks.
 
+## Table of Contents
+
+- [fishCenSV2](#fishcensv2)
+  - [Table of Contents](#table-of-contents)
+  - [Introduction](#introduction)
+  - [Machine Learning](#machine-learning)
+    - [YOLOv8](#yolov8)
+    - [ByteTrack](#bytetrack)
+    - [TensorRT](#tensorrt)
+  - [How the Code Works](#how-the-code-works)
+  - [The Code](#the-code)
+    - [Server Thread](#server-thread)
+    - [UDP Thread](#udp-thread)
+    - [Main Loop Thread](#main-loop-thread)
+  - [Appendix](#appendix)
+    - [Constexpr](#constexpr)
+    - [Alias Declarations](#alias-declarations)
+    - [Noexcept](#noexcept)
+    - [Lambda Expressions](#lambda-expressions)
+    - [Threading](#threading)
+    - [RAII](#raii)
+    - [Mutex Locking with RAII](#mutex-locking-with-raii)
+    - [Smart Pointers (Unique and Shared)](#smart-pointers-unique-and-shared)
+    - [Condition Variable](#condition-variable)
+    - [Move Semantics](#move-semantics)
+    - [Return Value Optimization (RVO)](#return-value-optimization-rvo)
+
+
 ## Introduction
 FishCensV2 is a C++ project that uses machine learning to classify and count salmon as they swim. It draws bounding boxes on the fish, tracks their movement across the camera, and counts them once they cross the middle of the camera. All of this runs on a NVIDIA Jetson TX2 which performs inference using YOLOv8 and tracking using ByteTrack. Video feed is grabbed from a Raspberry Pi 4 over UDP.
 
 This repository contains all the code for the Jetson and documentation for everything. The next few sections cover a more in-depth breakdown of all of the code in the `main.cpp` file. More detailed explanations about the classes/libraries used can be found in the `libs` folder. Each folder in there corresponds to a "library" which has documentation as well. Some of it may seem more exhaustive than necessary but since not everyone knows modern C++ or machine learning I feel it is needed.
 
-It is highly recommended to read the appendix which contains C++ features that may need more clarification.
+It is highly recommended to read the [Appendix](#appendix) which contains C++ features that may need more clarification.
 
-NOTE: As of right now everything is still WIP. Many things are missing and the explanations may not be the best.
+**NOTE: As of right now everything is still WIP. Many things are missing and the explanations may not be the best.**
 
 ## Machine Learning
 I thought I would put this here in order to explain some of the machine learning libraries, tools, and how we actually set everything up.
 
 ### YOLOv8
+
 YOLOv8 is a machine learning real-time object detection model. It simply takes in an image and outputs bounding boxes around the objects it detects in the image. It also can differentiate between two different types of objects such as a dog or a cat.
 
 We train the YOLOv8 model using weights from a previously trained model. This is often better than training the model from scratch and also requires less training data. The model is trained using Google Colab as it offers power cloud computing GPUs like the NVIDIA A100. Once the model is trained we have a file containing all the weights and everything we need to run the model on some inputs. An additional step is the conversion to another format called ONNX. This is a more universal format as machine learning models can be trained using PyTorch, or TensorFlow which do not use the same format. We use ONNX for our project. 
@@ -54,7 +83,7 @@ std::mutex m_udp;                   //Mutex for UDP queue
 std::mutex m_data;                  //Mutex for counting data;
 std::queue<cv::Mat> frame_queue;    //Queue of frames for UDP stream.
 ```
-This is mostly self-explanatory. The UDP server relies on a queue of video frames which the main loop code pushes onto it. Thus, we have a producer-consumer problem which a condition variable can help with. See the Appendix for more info about condition variables. Next let's take a look at the main function
+This is mostly self-explanatory. The UDP server relies on a queue of video frames which the main loop code pushes onto it. Thus, we have a producer-consumer problem which a condition variable can help with. See the [Appendix](#appendix) for more info about condition variables. Next let's take a look at the main function
 
 ```cpp
 int main() {
@@ -75,7 +104,7 @@ int main() {
 }
 ```
 
-The first two lines setup the server that sends counting data to clients. Note that the global variable mutex `m_data` is passed into its constructor. The next step is the creation of three threads. The `server_th` thread uses a lambda function (see Appendix) since it is only one line of code.  The next thread `udp_stream_th` calls the `udp_stream` function. This is a live video feed of the camera with bounding boxes and counts. The final thread `main_loop_th` calls the `main_loop` function. This is the function that does inference, tracking, and other things. Finally `.join()` is called on each thread (again see Appendix)
+The first two lines setup the server that sends counting data to clients. Note that the global variable mutex `m_data` is passed into its constructor. The next step is the creation of three threads. The `server_th` thread uses a lambda function (see [Appendix](#appendix)) since it is only one line of code.  The next thread `udp_stream_th` calls the `udp_stream` function. This is a live video feed of the camera with bounding boxes and counts. The final thread `main_loop_th` calls the `main_loop` function. This is the function that does inference, tracking, and other things. Finally `.join()` is called on each thread (again see [Appendix](#appendix))
 
 ### Server Thread
 The server thread uses a lambda function which only executes the following
@@ -94,7 +123,7 @@ constexpr int compression_factor = 80;
 std::vector<uint8_t> buff;
 std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY,compression_factor};
 ```
-For more info on `constexpr` see the Appendix.  The first three lines just setup some UDP variables. The next three lines setup JPEG compression that will be applied to each video frame. The `buff` vector will contain the pure bytes of the compressed image that will be sent over the stream.
+For more info on `constexpr` see the [Appendix](#appendix).  The first three lines just setup some UDP variables. The next three lines setup JPEG compression that will be applied to each video frame. The `buff` vector will contain the pure bytes of the compressed image that will be sent over the stream.
 
 The next couple lines in the code are straightforward and start the UDP server.
 ```cpp
@@ -383,9 +412,10 @@ if(cv::waitKey(1) >= 0) {
 After doing all the drawing to the frame we push it onto the UDP frame queue and notify the condition variable. Finally, we check if the user hits any key in the OpenCV window to end the program. This covers it for the `main.cpp` file.
 
 ## Appendix
-This Appendix is not meant to be a complete tutorial on each of these C++ features but good enough description on them. If you would like to read more on them then I highly recommend Scott Meyers' Effective Modern C++.
+This appendix is not meant to be a complete tutorial on each of these C++ features but a good enough description on them. If you would like to read more on them then I highly recommend Scott Meyers' Effective Modern C++.
 
 ### Constexpr
+---
 The keyword `constexpr` defines a value that can be evaluated at compile time. It is similar to a `#define` but more powerful. 
 
 ```cpp
@@ -397,8 +427,32 @@ constexpr float c = a * b + b * 2;
 All of these expressions will be evaluated at compile time. Of course this is only limited to things that you know can be done at compile time instead of run time. For example, a vector before C++20 can not be `constexpr` since it is dynamically allocated. For our purposes `constexpr` doesn't have a lot of use but it can be used to make compile time lookup tables. This is possible since we can also have `constexpr` functions.
 
 ### Alias Declarations
+---
+C++ allows the use of a type alias which allows us to create a new name for some type. For example,
+
+```cpp
+using uint = unsigned;
+using time_point = std::chrono::high_resolution_clock::time_point;
+
+uint n = 3;
+time_point start = std::chrono::high_resolution_clock::now();
+```
+
+The other way would be to use `typedef` but the syntax can be more confusing
+```cpp
+//Function pointers example
+
+//C++11 and above
+using func = void(*)(int);
+
+//C++03
+typdef void (*func)(int);
+
+```
+You can read more about aliases and typdefs [here](https://learn.microsoft.com/en-us/cpp/cpp/aliases-and-typedefs-cpp?view=msvc-170)
 
 ### Noexcept
+---
 A function that is declared with `noexcept` means the function is guaranteed to never throw an exception. For example, all destructors and memory deallocation functions are declared `noexcept` implicitly. Additionally, `noexcept` allows the compiler to generate better object code but the compiler may not do this so don't go throwing it on all of your functions. An example of the syntax can be seen below
 
 ```cpp
@@ -406,8 +460,44 @@ int f(int x) noexcept;
 ```
 
 ### Lambda Expressions
+---
+A lambda expression is convenient way for creating function objects that can be passed as arguments to other functions or executed right where it is declared. Consider the following example
+
+```cpp
+auto func = [](int a, int b) {
+   return a * b;
+};
+
+int b = func(3,4);
+
+```
+Here the `[]` is called the capture clause. It allows us to specify whether outside variables used in the lambda's body should be captured by reference or by value in the enclosing scope. Enclosing scope meaning the scope that the lambda expression is contained in. Here is a list of potential capture clauses,
+
+- `[]`: No access to any variables outside lambda within enclosing scope.
+- `[&]`: All variables in the enclosing scope are captured by reference.
+- `[=]`: All variables in the enclosing scope are captured by value.
+- `[&var1, var2]`: Variable `var1` is captured by reference, while `var2` by value.
+- `[&, var2]`: Variable `var2` is captured by value. All others by reference.
+- `[=, &var2]`: Variable `var2` is captured by reference. All others by value.
+
+For example,
+```cpp
+int a = 3;
+int b = 2;
+
+//Captures variables `a` and `b` by value. An empty clause [] causes a compile error here.
+auto func = [=](int d, int c) {
+   return a * b * d * c;
+};
+
+//Returns 3 * 2 * 1 * 4
+int m = func(1,4);
+```
+
+
 
 ### Threading
+---
 C++11 introduced multithreading which allows concurrent execution to be possible. Let's look at a simple example
 
 ```cpp
@@ -464,6 +554,7 @@ int main() {
 ```
 
 ### RAII
+---
 RAII stands for "Resource acquistion is initialization" but this name is honestly pretty bad. A better name is "Scoped-based resource management". Simply put, an object's lifetime is controlled by its scope and once it goes out of scope the object is destroyed and the resource is freed. We can see why this matters with the example of a mutex.
 
 ```cpp
@@ -484,6 +575,7 @@ std::mutex mtx;
 void func() {
 	std::lock_guard<std::mutex> lock{mtx};
 	//Some code here...
+	//Mutex is unlocked when `lock` goes out of scope.
 }
 ```
 
@@ -491,7 +583,7 @@ In this case the mutex is automatically locked when we construct the `std::lock_
 
 RAII is also used for dynamic memory allocation which is covered in the Smart Pointers section.
 
-## Mutex Locking with RAII
+### Mutex Locking with RAII
 I thought I would create a brief section that talked about mutexes. We already know from the section on RAII that manually locking and unlocking the mutex is not safe which is where the RAII wrapper class `std::lock_guard` came into play. There are at least two other RAII mutex locking classes which are `std::unique_lock` and `std::scoped_lock`.
 
 The class `std::unique_lock` is like `std::lock_guard` with the added bonus of being able to manually unlock and lock the mutex. `std::lock_guard` is a scoped based lock which can only unlock the mutex when the lock goes out of scope. `std::unique_lock` will still do the same automatic locking upon creation and unlocking upon destruction but now you can control the locking/unlocking manually. It also provides some other features but they aren't relevant for our purpose.
@@ -508,8 +600,107 @@ std::lock_guard lock;  //A compile time error
 Resolving errors at compile time is no doubt better than resolving errors at run time.
 
 ### Smart Pointers (Unique and Shared)
+---
+In C++ dynamic memory allocation can be done with the operators `new` and `delete`. However, this is a similar situation to the mutexes `lock` and `unlock` problem where `unlock` can be never called due to an exeception. In this case if `delete` is never called then the memory we allocated is never released. Just like with mutexes RAII comes to the rescue in the form of smart pointers. Smart pointers take care of allocation and deallocation upon destruction without the need to call `new` or `delete`. We will look at two smart pointers `std::unique_ptr` and `std::shared_ptr`.
+
+Unique pointers have exclusive ownership of the object they point to and take care of their destruction. Thus, we can't copy unique pointers since they would both try to destroy the object. However, we can move them (see section on [Move Semantics](#move-semantics)). A simple example is shown below
+
+```cpp
+#include <iostream>
+#include <memory>
+
+int main() {
+
+    //Create unique pointer to dynamic float array. It owns this array.
+    std::unique_ptr<float[]> output = std::make_unique<float[]>(5);
+
+    //Prints elements of array. Will print "Array at [0] = 0" and "Array at [1] = 0"
+    std::cout << "Array at [0] = " << *(output.get()) << "\n";
+    std::cout << "Array at [1] = " << *(output.get()+1) << "\n";
+
+    //Access array using raw pointer returned by .get() of unique pointer
+    *output.get() = 1;
+    *(output.get()+1) = 2;
+
+    //Prints elements of array. Will print "Array at [0] = 1" and "Array at [1] = 2"
+    std::cout << "Array at [0] = " << *(output.get()) << "\n";
+    std::cout << "Array at [1] = " << *(output.get()+1) << "\n";
+
+    //Memory of array deallocated when `output` goes out of scope
+    return 0;
+}
+
+```
+Unique pointers can also be passed a custom deleter functions that is invoked when the resource is released but we won't likely need one. 
+
+A shared pointer is used for shared-resource ownership. Multiple pointers all point to an object and will ensure its destruction. When the last pointer to the object is destroyed or points to something else then it will destroy the object. Shared pointers can tell if they are the last pointer by looking at the resource's reference count which keeps track of the number of pointers pointing to it. Shared pointers have more overhead and complications than the unique pointer which should be kept in mind. We only use a shared pointer in one piece of our code (the server) so I won't go through all the details. A simple example is shown below
+
+```cpp
+#include <iostream>
+#include <memory>
+
+class MyClass {
+public:
+    MyClass(int val) : value(val) {
+        std::cout << "Constructor called. Value: " << value << std::endl;
+    }
+    
+    ~MyClass() {
+        std::cout << "Destructor called. Value: " << value << std::endl;
+    }
+    
+    void setValue(int val) {
+        value = val;
+    }
+    
+    int getValue() const {
+        return value;
+    }
+
+private:
+    int value;
+};
+
+int main() {
+    //Creating shared pointers using make_shared.
+    std::shared_ptr<MyClass> ptr1 = std::make_shared<MyClass>(5);
+    std::shared_ptr<MyClass> ptr2 = ptr1; // Shared ownership
+    
+    //Accessing object through shared pointers.
+    std::cout << "Value of ptr1: " << ptr1->getValue() << std::endl;
+    std::cout << "Value of ptr2: " << ptr2->getValue() << std::endl;
+    
+    //Modifying object through one of the shared pointers.
+    ptr1->setValue(10);
+    
+    std::cout << "Value of ptr1 after modification: " << ptr1->getValue() << std::endl;
+    std::cout << "Value of ptr2 after modification: " << ptr2->getValue() << std::endl;
+    
+    //Resetting one of the shared pointers.
+    //This makes ptr1 point to nullptr and decrements the reference count.
+    ptr1.reset();
+    
+    std::cout << "ptr1 reset. Value of ptr2: " << ptr2->getValue() << std::endl;
+    
+    //ptr2 is still holding the object, so it will be destructed when ptr2 is reset or goes out of scope.
+    return 0;
+```
+
+The output is the following
+```
+Constructor called. Value: 5
+Value of ptr1: 5
+Value of ptr2: 5
+Value of ptr1 after modification: 10
+Value of ptr2 after modification: 10
+ptr1 reset. Value of ptr2: 10
+Destructor called. Value: 10
+```
+
+In essence, shared pointers are like the C++ way of garbage collection.
 
 ### Condition Variable
+---
 Consider the problem of a producer and consumer. The producer makes food at a slow pace while the consumer plates the food at a faster pace and then eats it. We can imagine this in a programming way as two threads (producer and consumer) which share access to queue of objects (food). The question is how do we synchronzize both of these threads so that the consumer doesn't try pop an item off of the queue if it is empty? In other words how do we prevent the consumer from plating food before the producer is done? This is where condition variables come into play. 
 
 ```cpp
@@ -607,7 +798,55 @@ A problem that can arise with condition variables is something called a spurious
 This section on conditon variables is derived from a great post that can be found [here](https://chrizog.com/cpp-thread-synchronization)
 
 ### Move Semantics
+---
+**This explanation of move semantics is not going to be technically accurate or in-depth since we do not utilize move semantics that much. Much of this section is based on chapter 5 of Scott Meyers' Effective Modern C++** 
+
+In C++ we have the concept of lvalues and rvalues. An lvalue is something that has a name or memory address. An rvalue is something that has no memory location and can be things like temporary objects or literal constants (e.g. 420, 3, etc.). Take a look at the following example
+```cpp
+int x = 3;
+std::string str = std::string("HI");
+```
+The variables `x` and `str` are lvalues. Meanwhile `3` and `std::string("HI")` are rvalues. Here `std::string("HI")` returns a temporary string object that must be assigned to a variable. Historically the l in lvalue and r in rvalue referred to which side the value would appear on assignment operator (=). In other words l means left, and r means right. 
+
+Move semantics is all about "moving" resources to avoid unecessary copy operations. To understand this further let's declare two vectors of some class `Object`
+
+```cpp
+std::vector<Object> objects = {obj1, obj2, obj3};
+std:vector<Object> objects_new; 
+```
+
+If we directly do `objects_new = objects;` then all of the items in `objects` are copied directly to `objects_new`. However, in some cases a copy could be expensive (long execution time) and we don't care about the `objects` vector. In that case move semantics allows us to move all the items from `objects` to `objects_new` without copying them. This leaves the `objects` in a valid but unspecified state. For the vector class a "valid but unspecified state" is just a empty vector. The syntax to do this all of this is as follows
+
+```cpp
+//For a vector it is simply like or equivalent to a pointer swap.
+objects_new = std::move(objects);
+```
+
+Now `std::move` actually doesn't do any "moving". What it actually does is it casts its argument to an rvalue. An rvalue is a candidate for moving so essentially `std::move` just tells the compiler that the object may be moved from. However, rvalues aren't always candidates for moving so keep that in mind. Additionally, not all types support move operations or they may be costly. For example, `std::mutex` is neither moveable or copyable. Additionally, applying a move on a `std::array` takes the exact same time complexity as copying due to underlying implementation details (`std::array` is not similar to `std::vector` and other heap storing containers). 
 
 ### Return Value Optimization (RVO)
+---
 
+Consider this simple function that returns a vector
+```cpp
+std::vector<int> createVector(int a, int b, int c) {
+   std::vector<int> v= {a,b,c};
+   return v;
+}
+```
 
+And we can call this function to create a vector
+
+```cpp
+std::vector<int> myvector = createVector(3,4,5);
+```
+
+One might think that when we call `createVector` it will construct a vector `v` with the three arguments, copy all of the elements to `myvector`, and destroy `v` once the function ends. So, using move semantics you might think we can avoid the copying and do this instead
+
+```cpp
+std::vector<int> createVector(int a, int b, int c) {
+   std::vector<int> v= {a,b,c};
+   return std::move(v); //NO
+}
+```
+But this is not needed at all! The compiler will actually perform copy elision to avoid this unecessary copy. This is called return value optimization (RVO). So don't use `std::move` with the return statement and trust the compiler!
