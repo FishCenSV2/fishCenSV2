@@ -1,9 +1,16 @@
 # YoloV8
-This documentation contains breakdowns of some of (not all) of the functions used in the `YoloV8` class. Much of this is based the TensorRT documentation found [here](https://docs.nvidia.com/deeplearning/tensorrt/archives/tensorrt-821/quick-start-guide/index.html#run-engine-c) and also [here](https://docs.nvidia.com/deeplearning/tensorrt/archives/tensorrt-821/api/c_api/classnvinfer1_1_1_i_execution_context.html)
+This documentation contains breakdowns of some (not all) of the functions used in the `YoloV8` class. Much of this is based the TensorRT documentation found [here](https://docs.nvidia.com/deeplearning/tensorrt/archives/tensorrt-821/quick-start-guide/index.html#run-engine-c) and also [here](https://docs.nvidia.com/deeplearning/tensorrt/archives/tensorrt-821/api/c_api/classnvinfer1_1_1_i_execution_context.html)
 
 **NOTE: This documentation does not cover training the actual machine learning model and exporting it to ONNX. Please see section [YOLOv8](https://github.com/FishCenSV2/fishCenSV2/tree/main?tab=readme-ov-file#yolov8) for this**
 
 ## Table of Contents
+- [YoloV8](#yolov8)
+  - [Table of Contents](#table-of-contents)
+  - [Function Breakdowns](#function-breakdowns)
+    - [Initialization](#initialization)
+    - [Preprocessing](#preprocessing)
+    - [Prediction](#prediction)
+    - [Postprocessing](#postprocessing)
 
 ## Function Breakdowns
 
@@ -11,7 +18,7 @@ This documentation contains breakdowns of some of (not all) of the functions use
 
 ### Initialization
 ---
-The following shows the `init` function.
+The following shows the `init` method.
 
 ```cpp
 void YoloV8::init() {
@@ -72,13 +79,21 @@ _input_index = _engine->getBindingIndex("images");
 _output_index = _engine->getBindingIndex("output0");
 ```
 
-**IMPORTANT!** These strings might change depending on the model. In order to find the correct names you can drag-and-drop the ONNX model into [Netron](https://netron.app/). The following figure shows what you should see at the very top.
+**IMPORTANT!** These strings might change depending on the model. In order to find the correct names you can drag-and-drop the ONNX model into [Netron](https://netron.app/). The following figure shows an example of what you should see at the very top.
 
-IMAGE GOES HERE
+<figure>
+    <img src="../../assets/netron_layer.png"
+         alt="ONNX model viewed in Netron.">
+    <figcaption>ONNX model viewed in Netron. Click the highlighted box to see model properties</figcaption>
+</figure>
 
 Click on the highlighted box and you should see a panel pop up on the right. Look for the two bolded titles `INPUTS` and `OUTPUTS`. These are what you substitute for the strings in the argument of the `getBindingIndex` function. The following figure shows how I obtained `"images"` and `"output0"`.
 
-IMAGE GOES HERE. 
+<figure>
+    <img src="../../assets/netron_names.png"
+         alt="Model properties panel in Netron">
+    <figcaption>Model properties panel in Netron. Highlights show what strings you need for the getBindingIndex function.</figcaption>
+</figure>
 
 Next we can get the input and output dimensions `idims` and `odims`
 
@@ -87,7 +102,7 @@ const auto idims = _engine->getBindingDimensions(_input_index);
 const auto odims = _engine->getBindingDimensions(_output_index);
 ```
 
-**IMPORTANT!** Your model might have dynamic input sizing (which also means dynamic output sizing) which means your model can take any input size. This can be seen by the sign of `idims.d[0]` and `odims.d[0]` being negative. This is why we generally start from `idims.d[1]` or `odims.d[1]`.
+**IMPORTANT!** Your model might have dynamic input sizing (which also means dynamic output sizing) which means your model can take any input size. This can be seen by the sign of `idims.d[0]` and `odims.d[0]` being negative. This is why we generally start from `idims.d[1]` or `odims.d[1]`. Netron may show the first dimension as `batch_size` which is most likely an indicator for this. In any case even if we do not run into this problem it is still good to know about it.
 
 The next part of the code finds the max output dimension and the total dimension length from `odims`.
 
@@ -126,7 +141,7 @@ The `_buffers` member variable is a `void*` buffer of size two. It stores the in
 
 ### Preprocessing 
 ---
-The following shows the `preprocess` function.
+The following shows the `preprocess` method.
 
 ```cpp
 cv::Mat YoloV8::preprocess(cv::Mat& image) {
@@ -161,9 +176,9 @@ Mat cv::dnn::blobFromImages	(InputArrayOfArrays 	images,
                             int 	                ddepth = CV_32F 
 )	
 ```
-### Preprocessing 
+### Prediction
 ---
-The following shows the `predict` function.
+The following shows the `predict` method.
 
 ```cpp
 void YoloV8::predict(cv::Mat& input) {
@@ -186,7 +201,8 @@ What this essentially does is
 The output needs to be processed so the `postprocess` function **must** be called after this.
 
 ### Postprocessing
-The following shows the `postprocess` function.
+---
+The following shows the `postprocess` method.
 
 ```cpp
 std::vector<Object> YoloV8::postprocess(float scale_factor) {
@@ -261,10 +277,10 @@ To visualize the output in 2D we will assume our output has dimensions of 5x2 fo
 | y        |   320    |   321    |
 | w        |   100    |    50    |
 | h        |    60    |   120    |
-| Class 1  |     4    |    12    |
-| Class 2  |    35    |    0     |
+| Class 1  |   0.7    |   0.4    |
+| Class 2  |   0.3    |   0.6    |
 
-For each object or column we have the 4 values specifying the bounding box location and size as well as 2 numbers which correspond to unnormalized scores for each class. We decide the class of the object by picking the one with the highest number. The following code does the equivalent of this
+For each object or column we have the 4 values specifying the bounding box location and size as well as 2 numbers which correspond to the probability scores for each class. We decide the class of the object by picking the one with the highest number. The following code does the equivalent of this
 
 ```cpp
 for(int col = 0; col < _max_out_dim; col++) {
@@ -297,6 +313,8 @@ for(int col = 0; col < _max_out_dim; col++) {
 ```
 
 Once we have found the max score for a object we compare it to a threshold value and if it is greater than this threshold we add it to three vectors. The final step is to peform non-maximum suppression (NMS) to remove duplicate detections which returns a vector of indices that we store in `_indices`. The indices correspond to indices in the three vectors of objects that we should keep. For example, a vector containing indices 0,3,4 means we should use elements from _boxes[0], _boxes[3], _boxes[4], _class_ids[0], _class_ids[3], etc. 
+
+**NOTE**: You can change the score threshold and NMS threshold in the `yolov8.hpp` file.
 
 Finally, we can use these elements from the three vectors to create a vector of bounding box objects. The objects are structs which contain the elements from the three vectors as shown below.
 

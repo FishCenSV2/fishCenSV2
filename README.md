@@ -30,9 +30,11 @@ A fish-counting and identifier system using machine learning that can be used to
 
 
 ## Introduction
-FishCensV2 is a C++ project that uses machine learning to classify and count salmon as they swim. It draws bounding boxes on the fish, tracks their movement across the camera, and counts them once they cross the middle of the camera. All of this runs on a NVIDIA Jetson TX2 which performs inference using YOLOv8 and tracking using ByteTrack. Video feed is grabbed from a Raspberry Pi 4 over UDP.
+FishCenSV2 is a C++ project that uses machine learning to classify and count salmon as they swim. It draws bounding boxes on the fish, tracks their movement across the camera, and counts them once they cross the middle of the camera. All of this runs on a NVIDIA Jetson TX2 which performs inference using YOLOv8 and tracking using ByteTrack. Video feed is grabbed from a Raspberry Pi 4 over UDP.
 
-This repository contains all the code for the Jetson and documentation for everything. The next few sections cover a more in-depth breakdown of all of the code in the `main.cpp` file. More detailed explanations about the classes/libraries used can be found in the `libs` folder. Each folder in there corresponds to a "library" which has documentation as well. Some of it may seem more exhaustive than necessary but since not everyone knows modern C++ or machine learning I feel it is needed.
+The first version of the FishCenS project only used a Raspberry Pi 4 and a Google Coral Accelerator to help with the machine learning. Additionally, it was limited to TensorFlow Lite models and OpenCV trackers. We aim to build upon the previous project by improving the algorithms and hardware used.
+
+This repository contains all the code for the Jetson and documentation for everything. The next few sections cover a more in-depth breakdown of all of the code in the `main.cpp` file. More detailed explanations about the classes/libraries used can be found in the [`libs`](https://github.com/FishCenSV2/fishCenSV2/tree/main/libs) folder. Each folder in there corresponds to a "library" which has documentation as well. Some of it may seem more exhaustive than necessary but since not everyone knows modern C++ or machine learning I feel it is needed.
 
 It is highly recommended to read the [Appendix](#appendix) which contains C++ features that may need more clarification.
 
