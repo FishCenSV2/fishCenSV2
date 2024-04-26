@@ -118,10 +118,11 @@ The `udp_stream` function starts with the following
 ```cpp
 const std::string ip = "239.255.0.1"; //Multicast address.
 constexpr unsigned port = 12345;
-auto udp_ip = asio::ip::address::from_string(ip);
+const auto udp_ip = asio::ip::address::from_string(ip);
 constexpr int compression_factor = 80;
 std::vector<uint8_t> buff;
-std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY,compression_factor};
+const std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY,compression_factor};
+
 ```
 For more info on `constexpr` see the [Appendix](#appendix).  The first three lines just setup some UDP variables. The next three lines setup JPEG compression that will be applied to each video frame. The `buff` vector will contain the pure bytes of the compressed image that will be sent over the stream.
 
@@ -152,20 +153,20 @@ while(1) {
   cv::imencode(".jpg",frame,buff,params);
   
   socket.send_to(asio::buffer(buff),receiver_endpoint,0,ec);
-```
 }
+```
 
 This is similar to the condition variable code in the appendix. Once `cond_var` is notified we check if the `end_program_flag` is set and if it is then we end the loop and our function returns which ends the thread. Otherwise, we get an image frame from the queue, unlock the lock, encode the image in JPEG format, and send over the UDP socket to the client.
 
 ### Main Loop Thread
 The main loop function contains all the inference, and tracking code. First we take a look at the following lines
 ```cpp
-    //For some reason relative paths don't work
-    std::string classes_file_path = "/home/nvidia/Desktop/fishCenSV2/coco-classes.txt";
-    std::string engine_file_path = "/home/nvidia/Desktop/fishCenSV2/yolov8n.engine";
+//For some reason relative paths don't work
+const std::string classes_file_path = "/home/nvidia/Desktop/fishCenSV2/coco-classes.txt";
+const std::string engine_file_path = "/home/nvidia/Desktop/fishCenSV2/yolov8n.engine";
 
-    //Address is the Jetson's. This should always be the same address as configured by the router.
-    const std::string pipeline = "udpsrc address=192.168.0.103 port=5000 ! application/x-rtp, payload=96, encoding-name=H264 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw, format=BGRx ! videoconvert ! video/x-raw, format=BGR, width=640, height=480 ! appsink";
+//Address is the Jetson's. This should always be the same address as configured by the router.
+const std::string pipeline = "udpsrc address=192.168.0.103 port=5000 ! application/x-rtp, payload=96, encoding-name=H264 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw, format=BGRx, width=640, height=480 ! videoconvert ! video/x-raw, format=BGR, width=640, height=480 ! appsink";
 ```
 
 The first two lines are for intializing the machine learning model and we can ignore it for now. The last line is fed into the `.open()` function of the `cv::VideoCapture` class. Notably, this is more complicated than a regular UDP url since we are using GStreamer as the backend for video instead of FFMPEG (it didn't work). Not much else is to be said as much of this was hacked together from examples online. 
@@ -193,12 +194,15 @@ Timer timer_total = Timer();   //Timer for measuring total execution time
 
 //Construct the machine learning model with the two files from before
 YoloV8 detector(classes_file_path,engine_file_path);
+
+std::cout << "Initializing YoloV8 engine\n";
+
 detector.init();
 ```
 
 The first line sets the FPS for the tracking algorithm (initialization not seen here). The next couple lines are the left and right counts for the species. Left and right mean the direction of travel when crossing the middle of the screen At the moment this just counts cellphones and anything else that is not a cellphone.  The lines after that are just more setup and some will be brought up again later. Note that the second-to-last line constructs the machine learning detector using the two strings mentioned at the start.
 
-NOTE: PLEASE look at the documentation for the yolo class. There is the possiblity that something may break due to using a different model.
+NOTE: PLEASE look at the documentation for the yolo class [here](https://github.com/FishCenSV2/fishCenSV2/tree/main/libs/yolo). There is the possiblity that something may break due to using a different model.
 
 Next we have the following code
 ```cpp
@@ -307,7 +311,7 @@ if(output_stracks.size() > 0) {
     else {
       int previous_position = previous_pos[output_stracks[i].track_id];
   
-      if(current_position - previous_position > 0 && previous_position < 340 && current_position >= 340) {
+      if(current_position - previous_position > 0 && previous_position < 320 && current_position >= 320) { {
         if(detector.classes[objects[i].label] == "cell phone") {
           r_cell_count++;
         }
@@ -318,7 +322,7 @@ if(output_stracks.size() > 0) {
   
       }
   
-      else if(current_position - previous_position < 0 && previous_position >= 340 && current_position < 340) {
+      else if(current_position - previous_position < 0 && previous_position >= 320 && current_position < 320) {
         if(detector.classes[objects[i].label] == "cell phone") {
           l_cell_count++;
         }
@@ -334,10 +338,13 @@ if(output_stracks.size() > 0) {
   
     //Code below directly grabbed from one of the ByteTrack TensorRT files
     std::vector<float> tlwh = output_stracks[i].tlwh;
+    float prob_score = objects[i].prob * 100;
     
     //Draw bounding boxes, and object classes to frame.
     cv::Scalar s = tracker.get_color(output_stracks[i].track_id);
-    cv::putText(frame, cv::format("%s #%d", detector.classes[objects[i].label].c_str(),output_stracks[i].track_id), cv::Point(tlwh[0], tlwh[1]-5),
+    cv::putText(frame, cv::format("%s#%d", (detector.classes[objects[i].label]).c_str(),output_stracks[i].track_id), cv::Point(tlwh[0], tlwh[1]-24),
+    0, 0.6, cv::Scalar(0,0,255),1,cv::LINE_AA);
+    cv::putText(frame, cv::format("%.2f%s",prob_score,"%"), cv::Point(tlwh[0], tlwh[1]-5),
     0, 0.6, cv::Scalar(0,0,255),1,cv::LINE_AA);
     cv::rectangle(frame, cv::Rect(tlwh[0],tlwh[1],tlwh[2],tlwh[3]),s,2);
   
@@ -397,6 +404,7 @@ We will skip some lines of code since they are just for drawing things to the vi
     frame_queue.push(frame);
 }
 
+//Notify UDP thread
 cond_var.notify_one();
 
 if(cv::waitKey(1) >= 0) {
