@@ -182,6 +182,8 @@ void main_loop(Server& server) {
 
         timer.start();
 
+        //Scale up bounding boxes by 2. Input was 320x320 but output is 640x640.
+        //Output is what is shown on the OpenCV
         objects = detector.postprocess(2);
 
         timer.end();

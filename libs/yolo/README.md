@@ -268,7 +268,7 @@ std::vector<Object> YoloV8::postprocess(float scale_factor) {
 
 The `_output_data` array (1D) has dimensions of `(# of classes + 4) x (# of objects detectable)`. The 4 refers to the xywh which specifies the bounding box dimensions. For example if the output dimensions are 84x2100 then we have 80 classes and 2100 detectable objects. In order to easily index through this array we use a `cv::Mat` called `data` which is not a copy of `_output_data`, but rather has a reference to it and allows for syntax similar to accessing a 2D array.
 
-To visualize the output in 2D we will assume our output has dimensions of 5x2 for simplicity.
+To visualize the output in 2D we will assume our output has dimensions of 6x2 for simplicity.
 
 
 |          | Object 1 | Object 2 |
@@ -314,7 +314,7 @@ for(int col = 0; col < _max_out_dim; col++) {
 
 Once we have found the max score for a object we compare it to a threshold value and if it is greater than this threshold we add it to three vectors. The final step is to peform non-maximum suppression (NMS) to remove duplicate detections which returns a vector of indices that we store in `_indices`. The indices correspond to indices in the three vectors of objects that we should keep. For example, a vector containing indices 0,3,4 means we should use elements from _boxes[0], _boxes[3], _boxes[4], _class_ids[0], _class_ids[3], etc. 
 
-**NOTE**: You can change the score threshold and NMS threshold in the `yolov8.hpp` file.
+**NOTE**: You can change the score threshold and NMS threshold in the `yolov8.hpp` file on lines 65 and 66.
 
 Finally, we can use these elements from the three vectors to create a vector of bounding box objects. The objects are structs which contain the elements from the three vectors as shown below.
 

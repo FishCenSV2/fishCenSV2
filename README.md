@@ -171,6 +171,8 @@ const std::string engine_file_path = "/home/nvidia/Desktop/fishCenSV2/yolov8n.en
 const std::string pipeline = "udpsrc address=192.168.0.103 port=5000 ! application/x-rtp, payload=96, encoding-name=H264 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw, format=BGRx, width=640, height=480 ! videoconvert ! video/x-raw, format=BGR, width=640, height=480 ! appsink";
 ```
 
+**IMPORTANT!** Change the filepaths if you are using different models. The `.txt` file should have each class separated line-by-line and be in the same order as the model (check Netron for order). For example, line one is index 0. You can see this in the `MODEL PROPERTIES` panel under `METADATA` and `names`.
+
 The first two lines are for intializing the machine learning model and we can ignore it for now. The last line is fed into the `.open()` function of the `cv::VideoCapture` class. Notably, this is more complicated than a regular UDP url since we are using GStreamer as the backend for video instead of FFMPEG (it didn't work). Not much else is to be said as much of this was hacked together from examples online. 
 
 Let us take a look at the next lines

@@ -123,7 +123,7 @@ void YoloV8::init() {
 
 }
 
-cv::Mat YoloV8::preprocess(cv::Mat& image) {
+[[nodiscard]] cv::Mat YoloV8::preprocess(cv::Mat& image) {
     cv::Mat frame;
 
     //The padding is hardcoded based on an input of 640*480 so it will just
@@ -153,7 +153,7 @@ void YoloV8::predict(cv::Mat& input) {
         
 }
 
-std::vector<Object> YoloV8::postprocess(float scale_factor) {
+[[nodiscard]] std::vector<Object> YoloV8::postprocess(float scale_factor) {
 
     constexpr int class_offset = 4; //The first four numbers are the xywh
     std::vector<Object> objects;    //Final output vector for bounding boxes.

@@ -110,7 +110,7 @@ class YoloV8 {
         * @param image A cv::Mat of the image.
         * @return A preprocessed version of the input image.
         */
-        cv::Mat preprocess(cv::Mat& image);
+        [[nodiscard]] cv::Mat preprocess(cv::Mat& image);
 
         /** @brief Performs inference on a pre-processed image.
         *
@@ -124,6 +124,6 @@ class YoloV8 {
         * @param scaling_factor The factor to scale the bounding boxes.
         * @return A vector of bounding box objects.
         */
-        std::vector<Object> postprocess(float scale_factor);
+        [[nodiscard]] std::vector<Object> postprocess(float scale_factor);
   
 };
