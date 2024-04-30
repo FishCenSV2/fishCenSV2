@@ -1,7 +1,7 @@
 # YoloV8
 This documentation contains breakdowns of some (not all) of the functions used in the `YoloV8` class. Much of this is based the TensorRT documentation found [here](https://docs.nvidia.com/deeplearning/tensorrt/archives/tensorrt-821/quick-start-guide/index.html#run-engine-c) and also [here](https://docs.nvidia.com/deeplearning/tensorrt/archives/tensorrt-821/api/c_api/classnvinfer1_1_1_i_execution_context.html)
 
-**NOTE: This documentation does not cover training the actual machine learning model and exporting it to ONNX. Please see section [YOLOv8](https://github.com/FishCenSV2/fishCenSV2/tree/main?tab=readme-ov-file#yolov8) for this**
+**NOTE: This documentation does not cover training the actual machine learning model and exporting it to ONNX. Please see section [Training the Model](https://github.com/FishCenSV2/fishCenSV2/tree/main?tab=readme-ov-file#training-the-model) for this**
 
 ## Table of Contents
 - [YoloV8](#yolov8)
@@ -14,7 +14,7 @@ This documentation contains breakdowns of some (not all) of the functions used i
 
 ## Function Breakdowns
 
-**NOTE: The below assumes that the engine file already exists. To see how to create the engine file from the ONNX file please see the section [TensorRT](https://github.com/FishCenSV2/fishCenSV2/tree/main?tab=readme-ov-file#tensorrt).**
+**NOTE: The below assumes that the engine file already exists. To see how to create the engine file from the ONNX file please see the section [TensorRT Engine](https://github.com/FishCenSV2/fishCenSV2/tree/main?tab=readme-ov-file#tensorrt-engine).**
 
 ### Initialization
 ---
@@ -280,7 +280,7 @@ To visualize the output in 2D we will assume our output has dimensions of 6x2 fo
 | Class 1  |   0.7    |   0.4    |
 | Class 2  |   0.3    |   0.6    |
 
-For each object or column we have the 4 values specifying the bounding box location and size as well as 2 numbers which correspond to the probability scores for each class. We decide the class of the object by picking the one with the highest number. The following code does the equivalent of this
+For each object or column we have the 4 values specifying the bounding box location and size as well as 2 numbers which correspond to the probability scores for each class. We decide the class of the object by picking the one with the highest score. The following code does the equivalent of this
 
 ```cpp
 for(int col = 0; col < _max_out_dim; col++) {

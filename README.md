@@ -6,10 +6,14 @@ A fish-counting and identifier system using machine learning that can be used to
 - [fishCenSV2](#fishcensv2)
   - [Table of Contents](#table-of-contents)
   - [Introduction](#introduction)
-  - [Machine Learning](#machine-learning)
+  - [Machine Learning Background](#machine-learning-background)
     - [YOLOv8](#yolov8)
     - [ByteTrack](#bytetrack)
     - [TensorRT](#tensorrt)
+  - [Training the Model](#training-the-model)
+    - [Google Colab and Roboflow](#google-colab-and-roboflow)
+    - [Exporting the Model](#exporting-the-model)
+    - [TensorRT Engine](#tensorrt-engine)
   - [How the Code Works](#how-the-code-works)
   - [The Code](#the-code)
     - [Server Thread](#server-thread)
@@ -40,7 +44,7 @@ It is highly recommended to read the [Appendix](#appendix) which contains C++ fe
 
 **NOTE: As of right now everything is still WIP. Many things are missing and the explanations may not be the best.**
 
-## Machine Learning
+## Machine Learning Background
 I thought I would put this here in order to explain some of the machine learning libraries, tools, and how we actually set everything up.
 
 ### YOLOv8
@@ -62,9 +66,64 @@ Note that after some period of time if an ID can't be successfully retracked the
 ByteTrack is very good due to its speed and the ability to deal with occlusion. Occlusion is when an object is unable to be seen for several frames due to being blocked by something. If this happens for a short-enough period of time then ByteTrack is able to retrack the object.
 
 ### TensorRT
-TensorRT is a NVIDIA library that speeds up inference time for AI models. Inference refers to the AI model taking in an input and spitting out a output. Much of the details are in the YOLOv8 library code but in short TensorRT converts a machine learning model (in ONNX format) into an engine file that is optimized for the architecture of the computer.  It can then use this engine file to run the model.  For our use we use a command line tool called `trtexec` to create the engine file, and use the C++ library to run the engine for inference. More info about `trtexec` can be found [here](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#trtexec).
+TensorRT is a NVIDIA library that speeds up inference time for AI models. Inference refers to the AI model taking in an input and spitting out a output. Much of the details are in the YOLOv8 library code but in short TensorRT converts a machine learning model (in ONNX format) into an engine file that is optimized for the architecture of the computer.  It can then use this engine file to run the model.  For our use we use a command line tool called `trtexec` to create the engine file, and use the C++ library to run the engine for inference. 
 
-NOTE: I will add more info here later. It can be finnicky to deal with.
+## Training the Model
+**NOTE: WORK IN PROGRESS**
+
+### Google Colab and Roboflow
+---
+Most of the step are straightforward as Roboflow essentially guides you through it. However there are some things to keep in mind.
+
+In Colab you must connect to a runtime which is equivalent to starting the GPU. The image below shows several relevant options
+
+<figure>
+    <img src="assets/roboflow_gpu.png"
+         alt="Colab runtime">
+</figure>
+
+- `Connect to a hosted runtime: T4`: Start the GPU specified on the right.
+- `Change runtime type`: Change language (Python vs R) or the GPU.
+- `Disconnect and delete runtime`: Stop the GPU.
+
+If you are using Colab Pro then you will want to use the A100 as the GPU.
+
+When you get to the model training you can specify the `epochs` and `imgsz`. The number of `epochs` seems to generally be set around 300. For us the `imgsz` is 640. While training the model look for the following quantities: `box_loss`, `cls_loss`, and `dfl_loss`. Make sure they mostly decrease overall for every few epochs. Additionally, you want the `mAP` values to increase.
+
+### Exporting the Model
+---
+To convert the model to ONNX format we must run the following code
+
+```python
+from ultralytics import YOLO
+
+#Load a custom trained model
+model = YOLO('path/to/best.pt')
+
+#Export the model
+model.export(format='onnx', imgsz=320) #Default is 640 for imgsz
+```
+
+You can do this in the Colab session itself or on a computer. More information on the export arguments can be found [here](https://docs.ultralytics.com/modes/export/#key-features-of-export-mode)
+
+**IMPORTANT!** The only argument you should need for exporting is the `imgsz` one. Anything else is not likely to be compatible with the way the code is written.
+
+### TensorRT Engine
+---
+On the Jetson the `trtexec` executable is located at `Desktop/temp_trt`. Otherwise you can get it from `/usr/src/tensorrt/bin`. Drag the ONNX file into this folder. We will assume the ONNX file is called `yolov8n.onnx` and the output file is named `yolov8n.engine` (pick whatever name you want). Run the following lines in the command line
+
+```bash
+$ cd Desktop/temp_trt
+$ ./trtexec --verbose --onnx=yolov8n.onnx --saveEngine=yolov8n.engine
+```
+
+This might take a couple of minutes. Once it finishes you will need to drag and drop the engine file into the same directory as the `main.cpp` in the project. 
+
+**IMPORTANT!** You will also need to modify the file path in `main.cpp` which is described in the [Main Loop Thread](#main-loop-thread) section. Also see the documentation for [YoloV8](https://github.com/FishCenSV2/fishCenSV2/tree/main/libs/yolo) as there may be other things you have to change.
+
+More info about `trtexec` can be found [here](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#trtexec).
+
+**NOTE: If the above fails then double check the ONNX file in Netron to make sure the input dimensions do not have `batch_size` in them. The export of the ONNX file should have only one kwarg, `imgsz`, to specify the input image size.** 
 
 ## How the Code Works
 The code has three parallel running processes: two servers, and a main loop. The first server is a UDP stream that just sends an annotated video feed to a client. Annotated meaning bounding boxes, live count, etc. The second server sends the actual counting data to the client. Both of these run independently of a main loop function which roughly does the following
