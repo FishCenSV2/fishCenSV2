@@ -2,3 +2,7 @@ build/
 resnet16.engine
 yolov8n.engine
 yolov8n.onnx
+best_t21.engine
+best_t21.onnx
+.vscode/launch.json
+.vscode/tasks.json

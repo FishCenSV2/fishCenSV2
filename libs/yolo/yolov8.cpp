@@ -129,6 +129,7 @@ void YoloV8::init() {
     //The padding is hardcoded based on an input of 640*480 so it will just
     //add 80 to the top and bottom of the the rows to make it 640*640
     cv::copyMakeBorder(image,frame, 80,80,0,0, CV_HAL_BORDER_CONSTANT, cv::Scalar(0,0,0));      
+    //cv::copyMakeBorder(image,frame, 0,0,0,0, CV_HAL_BORDER_CONSTANT, cv::Scalar(0,0,0));
 
     /*
     TensorRT prefers NCHW but apparently OpenCV uses NHCW. We can use
@@ -138,7 +139,10 @@ void YoloV8::init() {
     NOTE: The cv::Size(320,320) is also hardcoded based on the model.
           This should realistically be determined using idims.d 
     */
-    return cv::dnn::blobFromImage(frame,1.0/255,cv::Size(320,320),cv::Scalar(0,0,0),true,false,CV_32F);
+
+    //    return cv::dnn::blobFromImage(frame,1.0/255,cv::Size(320,320),cv::Scalar(0,0,0),true,false,CV_32F);
+    //std::cout << frame.size() << std::endl;
+    return cv::dnn::blobFromImage(frame,1.0/255,cv::Size(640,640),cv::Scalar(0,0,0),false,false,CV_32F);
 
 }
 
@@ -175,6 +179,7 @@ void YoloV8::predict(cv::Mat& input) {
         }
 
         if(max > _score_thresh) {
+            
             float x = data.at<float>(0,col) * scale_factor;
             float y = data.at<float>(1,col) * scale_factor;
             float w = data.at<float>(2,col) * scale_factor;
@@ -186,8 +191,17 @@ void YoloV8::predict(cv::Mat& input) {
             _boxes.push_back(cv::Rect(x_left_top,y_left_top,w,h));
             _class_ids.push_back(max_index);
             _confidences.push_back(max);
+
+            /*
+            std::cout << max << " : [" <<
+            x_left_top << ", " <<
+            y_left_top << ", " <<
+            w << ", " <<
+            h << "]" << std::endl;
+            //*/
         }
     }
+    
     /*
     NMS (Non-max-suppression) to remove duplicate bounding boxes.
     The _indices vector will store all the indices that correspond to non-duplicate
@@ -208,6 +222,15 @@ void YoloV8::predict(cv::Mat& input) {
     _boxes.clear();
     _confidences.clear();
     _class_ids.clear();
+
+    //std::cout << "# outputs from postprocess(inside): " << objects.size() << std::endl;
+    
+    /*for (int i = 0; i < objects.size(); i++) {
+        std::cout << ">\t" << objects[i].rect.x << "x " << objects[i].rect.y << "y " << objects[i].rect.width << "w " << objects[i].rect.height << "h " <<
+        "\t" << objects[i].label <<
+        "\t" << objects[i].prob << std::endl;
+    }
+    */
 
     return objects;
 

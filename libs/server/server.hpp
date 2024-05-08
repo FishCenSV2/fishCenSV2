@@ -20,7 +20,7 @@ using boost::asio::ip::tcp;
 class Server {
 public:
 
-    std::vector<int> data = std::vector<int>(4);///< Storage for data.
+    std::vector<int> data = std::vector<int>(12);///< Storage for data.
     std::mutex& mutex;                          ///< Mutex for data.
 
     /** @brief Constructor for server object

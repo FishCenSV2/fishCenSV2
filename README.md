@@ -30,8 +30,6 @@ A fish-counting and identifier system using machine learning that can be used to
     - [Smart Pointers (Unique and Shared)](#smart-pointers-unique-and-shared)
     - [Condition Variable](#condition-variable)
     - [Move Semantics](#move-semantics)
-    - [Return Value Optimization (RVO)](#return-value-optimization-rvo)
-
 
 ## Introduction
 FishCenSV2 is a C++ project that uses machine learning to classify and count salmon as they swim. It draws bounding boxes on the fish, tracks their movement across the camera, and counts them once they cross the middle of the camera. All of this runs on a NVIDIA Jetson TX2 which performs inference using YOLOv8 and tracking using ByteTrack. Video feed is grabbed from a Raspberry Pi 4 over UDP.

@@ -3,9 +3,9 @@
 
 BYTETracker::BYTETracker(int frame_rate, int track_buffer)
 {
-	track_thresh = 0.5;
-	high_thresh = 0.6;
-	match_thresh = 0.8;
+	track_thresh = 0.5;//0.5;
+	high_thresh = 0.6;//0.6;
+	match_thresh = 0.8;//0.8;
 
 	frame_id = 0;
 	max_time_lost = int(frame_rate / 30.0 * track_buffer);
@@ -63,6 +63,7 @@ vector<STrack> BYTETracker::update(const vector<Object>& objects)
 			
 		}
 	}
+//std::cout << "# detections @ step 1: " << detections.size() << endl;
 
 	// Add newly detected tracklets to tracked_stracks
 	for (int i = 0; i < this->tracked_stracks.size(); i++)
@@ -72,6 +73,8 @@ vector<STrack> BYTETracker::update(const vector<Object>& objects)
 		else
 			tracked_stracks.push_back(&this->tracked_stracks[i]);
 	}
+
+//std::cout << "# tracked_stracks after step 1: " << tracked_stracks.size() << endl;
 
 	////////////////// Step 2: First association, with IoU //////////////////
 	strack_pool = joint_stracks(tracked_stracks, this->lost_stracks);
@@ -84,6 +87,8 @@ vector<STrack> BYTETracker::update(const vector<Object>& objects)
 	vector<vector<int> > matches;
 	vector<int> u_track, u_detection;
 	linear_assignment(dists, dist_size, dist_size_size, match_thresh, matches, u_track, u_detection);
+
+//std::cout << "# matches @ step 2: " << matches.size() << endl;
 
 	for (int i = 0; i < matches.size(); i++)
 	{
@@ -176,6 +181,8 @@ vector<STrack> BYTETracker::update(const vector<Object>& objects)
 		removed_stracks.push_back(*track);
 	}
 
+//std::cout << "# u_detection after step 3: " << u_detection.size() << endl;
+
 	////////////////// Step 4: Init new stracks //////////////////
 	for (int i = 0; i < u_detection.size(); i++)
 	{
@@ -185,6 +192,8 @@ vector<STrack> BYTETracker::update(const vector<Object>& objects)
 		track->activate(this->kalman_filter, this->frame_id);
 		activated_stracks.push_back(*track);
 	}
+
+//std::cout << "# activated_stracks after step 4: " << activated_stracks.size() << endl;
 
 	////////////////// Step 5: Update state //////////////////
 	for (int i = 0; i < this->lost_stracks.size(); i++)
@@ -206,23 +215,28 @@ vector<STrack> BYTETracker::update(const vector<Object>& objects)
 	this->tracked_stracks.clear();
 	this->tracked_stracks.assign(tracked_stracks_swap.begin(), tracked_stracks_swap.end());
 
+//std::cout << "218> # tracked_stracks: " << tracked_stracks.size", # activated_stracks: " << activated_stracks.size() << endl;
 	this->tracked_stracks = joint_stracks(this->tracked_stracks, activated_stracks);
+//std::cout << "220> # tracked_stracks: " << tracked_stracks.size() << ", # refind_stracks: " << refind_stracks.size() << endl;
 	this->tracked_stracks = joint_stracks(this->tracked_stracks, refind_stracks);
+//std::cout << "222> # tracked_stracks: " << tracked_stracks.size() << ", # lost_stracks: " << lost_stracks.size() << endl;
 
 	//std::cout << activated_stracks.size() << std::endl;
 
 	this->lost_stracks = sub_stracks(this->lost_stracks, this->tracked_stracks);
+//std::cout << "227> # tracked_stracks: " << tracked_stracks.size() << ", # lost_stracks: " << lost_stracks.size() << endl;
 	for (int i = 0; i < lost_stracks.size(); i++)
 	{
 		this->lost_stracks.push_back(lost_stracks[i]);
 	}
-
+//std::cout << "232> # lost_stracks: " << lost_stracks.size() << ", # removed_stracks: " << removed_stracks.size() << endl;
 	this->lost_stracks = sub_stracks(this->lost_stracks, this->removed_stracks);
+//std::cout << "234> # lost_stracks: " << lost_stracks.size() << ", # removed_stracks: " << removed_stracks.size() << endl;
 	for (int i = 0; i < removed_stracks.size(); i++)
 	{
 		this->removed_stracks.push_back(removed_stracks[i]);
 	}
-
+//std::cout << "239> # removed_stracks: " << removed_stracks.size() << endl;
 	/*
 	Fix to prevent memory leak. Unsure if this will negatively impact
 	performance. Based on how Ultralytics dealt with it.
@@ -249,5 +263,16 @@ vector<STrack> BYTETracker::update(const vector<Object>& objects)
 			output_stracks.push_back(this->tracked_stracks[i]);
 		}
 	}
+/*
+std::cout << "# tracked_stracks after step 5: " << tracked_stracks.size() << endl;
+for (int i = 0; i > -1 && i < tracked_stracks.size(); i++) {
+	std::cout << tracked_stracks[i]->track_id << ", [ ";
+	vector<float> temp = tracked_stracks[i]->to_xyah();
+	for (int j = 0; j > -1 && j < temp.size(); j++) {
+		std::cout << temp[j] << ", ";
+	}
+	std::cout << "]" << std::endl;
+}
+//*/
 	return output_stracks;
 }

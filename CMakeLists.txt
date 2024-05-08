@@ -34,7 +34,8 @@ add_executable(fishCenSV2 main.cpp ${CMAKE_SOURCE_DIR}/libs/yolo/yolov8.cpp
                                    ${CMAKE_SOURCE_DIR}/libs/server/server.cpp
                                    ${CMAKE_SOURCE_DIR}/libs/server/server.hpp
                                    ${CMAKE_SOURCE_DIR}/libs/server/session.cpp
-                                   ${CMAKE_SOURCE_DIR}/libs/server/session.hpp)
+                                   ${CMAKE_SOURCE_DIR}/libs/server/session.hpp
+                                   ${CMAKE_SOURCE_DIR}/include/util.hpp)
 
 target_link_libraries(fishCenSV2 ${OpenCV_LIBS}
                                  ${Boost_LIBRARIES}   
@@ -46,6 +47,7 @@ target_include_directories(fishCenSV2 PRIVATE ${CMAKE_SOURCE_DIR}/libs/yolo)
 target_include_directories(fishCenSV2 PRIVATE ${CMAKE_SOURCE_DIR}/libs/bytetrack)
 target_include_directories(fishCenSV2 PRIVATE ${CMAKE_SOURCE_DIR}/libs/client)
 target_include_directories(fishCenSV2 PRIVATE ${CMAKE_SOURCE_DIR}/libs/server)
+target_include_directories(fishCenSV2 PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})

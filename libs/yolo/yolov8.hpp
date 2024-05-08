@@ -62,11 +62,11 @@ class YoloV8 {
         std::vector<std::string> classes;  ///< A vector of strings that contains the class names.
 
     private:
-        static constexpr float _score_thresh = 0.5;  ///< Score threshold for a detection.
-        static constexpr float _nms_thresh = 0.8;    ///< Threshold for NMS.
-        int32_t _input_index;                        ///< Input index.
-        int32_t _output_index;                       ///< Output index.
-        int _max_out_dim;                            ///< The maximum dimension of the output.
+        static constexpr float _score_thresh = 0.65;//0.5;  ///< Score threshold for a detection.
+        static constexpr float _nms_thresh = 0.8;//0.8;     ///< Threshold for NMS.
+        int32_t _input_index;                               ///< Input index.
+        int32_t _output_index;                              ///< Output index.
+        int _max_out_dim;                                   ///< The maximum dimension of the output.
 
         Logger _logger;                                        ///< Error logger.
         std::vector<char> _engine_data;                        ///< Engine data read from file
