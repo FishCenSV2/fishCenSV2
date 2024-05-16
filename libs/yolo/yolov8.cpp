@@ -129,7 +129,6 @@ void YoloV8::init() {
     //The padding is hardcoded based on an input of 640*480 so it will just
     //add 80 to the top and bottom of the the rows to make it 640*640
     cv::copyMakeBorder(image,frame, 80,80,0,0, CV_HAL_BORDER_CONSTANT, cv::Scalar(0,0,0));      
-    //cv::copyMakeBorder(image,frame, 0,0,0,0, CV_HAL_BORDER_CONSTANT, cv::Scalar(0,0,0));
 
     /*
     TensorRT prefers NCHW but apparently OpenCV uses NHCW. We can use
@@ -192,13 +191,6 @@ void YoloV8::predict(cv::Mat& input) {
             _class_ids.push_back(max_index);
             _confidences.push_back(max);
 
-            /*
-            std::cout << max << " : [" <<
-            x_left_top << ", " <<
-            y_left_top << ", " <<
-            w << ", " <<
-            h << "]" << std::endl;
-            //*/
         }
     }
     
@@ -222,15 +214,6 @@ void YoloV8::predict(cv::Mat& input) {
     _boxes.clear();
     _confidences.clear();
     _class_ids.clear();
-
-    //std::cout << "# outputs from postprocess(inside): " << objects.size() << std::endl;
-    
-    /*for (int i = 0; i < objects.size(); i++) {
-        std::cout << ">\t" << objects[i].rect.x << "x " << objects[i].rect.y << "y " << objects[i].rect.width << "w " << objects[i].rect.height << "h " <<
-        "\t" << objects[i].label <<
-        "\t" << objects[i].prob << std::endl;
-    }
-    */
 
     return objects;
 

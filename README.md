@@ -16,6 +16,7 @@ A fish-counting and identifier system using machine learning that can be used to
     - [TensorRT Engine](#tensorrt-engine)
   - [How the Code Works](#how-the-code-works)
   - [The Code](#the-code)
+    - [Camera Reading Thread](#camera-reading-thread)
     - [Server Thread](#server-thread)
     - [UDP Thread](#udp-thread)
     - [Main Loop Thread](#main-loop-thread)
@@ -30,6 +31,7 @@ A fish-counting and identifier system using machine learning that can be used to
     - [Smart Pointers (Unique and Shared)](#smart-pointers-unique-and-shared)
     - [Condition Variable](#condition-variable)
     - [Move Semantics](#move-semantics)
+    - [Return Value Optimization (RVO)](#return-value-optimization-rvo)
 
 ## Introduction
 FishCenSV2 is a C++ project that uses machine learning to classify and count salmon as they swim. It draws bounding boxes on the fish, tracks their movement across the camera, and counts them once they cross the middle of the camera. All of this runs on a NVIDIA Jetson TX2 which performs inference using YOLOv8 and tracking using ByteTrack. Video feed is grabbed from a Raspberry Pi 4 over UDP.
@@ -40,7 +42,8 @@ This repository contains all the code for the Jetson and documentation for every
 
 It is highly recommended to read the [Appendix](#appendix) which contains C++ features that may need more clarification.
 
-**NOTE: As of right now everything is still WIP. Many things are missing and the explanations may not be the best.**
+> [!NOTE] 
+> As of right now everything is still WIP. Many things are missing and the explanations may not be the best.
 
 ## Machine Learning Background
 I thought I would put this here in order to explain some of the machine learning libraries, tools, and how we actually set everything up.
@@ -67,7 +70,7 @@ ByteTrack is very good due to its speed and the ability to deal with occlusion. 
 TensorRT is a NVIDIA library that speeds up inference time for AI models. Inference refers to the AI model taking in an input and spitting out a output. Much of the details are in the YOLOv8 library code but in short TensorRT converts a machine learning model (in ONNX format) into an engine file that is optimized for the architecture of the computer.  It can then use this engine file to run the model.  For our use we use a command line tool called `trtexec` to create the engine file, and use the C++ library to run the engine for inference. 
 
 ## Training the Model
-**NOTE: WORK IN PROGRESS**
+The following sections are not exhaustive walkthroughs as I would just be reiterating what a YouTube video could probably do.
 
 ### Google Colab and Roboflow
 ---
@@ -86,7 +89,19 @@ In Colab you must connect to a runtime which is equivalent to starting the GPU. 
 
 If you are using Colab Pro then you will want to use the A100 as the GPU.
 
-When you get to the model training you can specify the `epochs` and `imgsz`. The number of `epochs` seems to generally be set around 300. For us the `imgsz` is 640. While training the model look for the following quantities: `box_loss`, `cls_loss`, and `dfl_loss`. Make sure they mostly decrease overall for every few epochs. Additionally, you want the `mAP` values to increase.
+When you get to the model training you can specify the `epochs` and `imgsz`. The number of `epochs` seems to generally be set around 300. For us the `imgsz` is 640. While training the model look for the following quantities: `box_loss`, `cls_loss`, and `dfl_loss`. Make sure they mostly decrease overall for every few epochs. Additionally, you want the `mAP` values to increase. 
+
+When you finish training (and running some cells) you should see the following two figures
+
+<figure>
+    <img src="assets/training_results.png"
+         alt="Training Results">
+        <img src="assets/confusion_matrix.png">
+</figure>
+
+The first figure is approximately what you should see and reflects the previous paragraphs mentions of decreasing loss and increasing precision/mAP score.
+
+The second figure is called the confusion matrix. I cannot provide a full explanation of it but what this amounts to is your model's accuracy for each class. The best case scenario is for a confusion matrix to have only color on its diagonal. Clearly, our model is only really accurate for Steelhead and Chum.
 
 ### Exporting the Model
 ---
@@ -104,7 +119,8 @@ model.export(format='onnx', imgsz=320) #Default is 640 for imgsz
 
 You can do this in the Colab session itself or on a computer. More information on the export arguments can be found [here](https://docs.ultralytics.com/modes/export/#key-features-of-export-mode)
 
-**IMPORTANT!** The only argument you should need for exporting is the `imgsz` one. Anything else is not likely to be compatible with the way the code is written.
+> [!IMPORTANT]  
+> The only argument you should need for exporting is the `imgsz` one. Anything else is not likely to be compatible with the way the code is written. For our case we can leave out this argument but in the future it would be good to explore smaller sizes for better FPS.
 
 ### TensorRT Engine
 ---
@@ -117,15 +133,17 @@ $ ./trtexec --verbose --onnx=yolov8n.onnx --saveEngine=yolov8n.engine
 
 This might take a couple of minutes. Once it finishes you will need to drag and drop the engine file into the same directory as the `main.cpp` in the project. 
 
-**IMPORTANT!** You will also need to modify the file path in `main.cpp` which is described in the [Main Loop Thread](#main-loop-thread) section. Also see the documentation for [YoloV8](https://github.com/FishCenSV2/fishCenSV2/tree/main/libs/yolo) as there may be other things you have to change.
+> [!IMPORTANT]
+> You will also need to modify the file path in `main.cpp` which is described in the [Main Loop Thread](#main-loop-thread) section. Also see the documentation for [YoloV8](https://github.com/FishCenSV2/fishCenSV2/tree/main/libs/yolo) as there may be other things you have to change.
 
 More info about `trtexec` can be found [here](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#trtexec).
 
-**NOTE: If the above fails then double check the ONNX file in Netron to make sure the input dimensions do not have `batch_size` in them. The export of the ONNX file should have only one kwarg, `imgsz`, to specify the input image size.** 
+> [!NOTE]
+> If the above fails then double check the ONNX file in Netron to make sure the input dimensions do not have `batch_size` in them. The export of the ONNX file should have only one kwarg, `imgsz`, to specify the input image size. 
 
 ## How the Code Works
-The code has three parallel running processes: two servers, and a main loop. The first server is a UDP stream that just sends an annotated video feed to a client. Annotated meaning bounding boxes, live count, etc. The second server sends the actual counting data to the client. Both of these run independently of a main loop function which roughly does the following
-- 1) Read a video frame from the Raspberry Pi's UDP stream.
+The code has four parallel running processes: two servers, camera frame reading, and a main loop. The first process is a UDP stream that just sends an annotated video feed to a client. Annotated meaning bounding boxes, live count, etc. The second process is a server that sends the actual counting data to the client. The third parallel process grabs frames from the Raspberry Pi's camera. All of these run independently of a main loop function which roughly does the following
+- 1) Read a video frame from the queue of camera frames 
 - 2) Pre-process the video frame and send it to the machine learning detection model.
 - 3) Read the output of detections directly from the detection model.
 - 4) Post-process the output and update the tracker with it.
@@ -136,13 +154,20 @@ The code has three parallel running processes: two servers, and a main loop. The
 This section dives into the running of the `main.cpp` file. There some added comments that don't exist in the actual code. Let's start by looking at some global variables that must be mentioned.
 
 ```cpp
-bool end_program_flag = false;      //Not atomic since it does not mix well with cond_var.
-std::condition_variable cond_var;   //Condition variable for UDP queue.
-std::mutex m_udp;                   //Mutex for UDP queue
-std::mutex m_data;                  //Mutex for counting data;
-std::queue<cv::Mat> frame_queue;    //Queue of frames for UDP stream.
+#define MAX_READ_QUEUE_SIZE 30
+
+bool end_program_flag = false;                  //Not atomic since it does not mix well with cond_var.
+std::condition_variable cond_udp_var;           //Condition variable for UDP queue.
+std::condition_variable cond_read_var;          //Condition variable for frame reading queue
+std::mutex m_udp;                               //Mutex for UDP queue.
+std::mutex m_data;                              //Mutex for counting data.
+std::mutex m_read;                              //Mutex for frame reading queue.
+std::queue<cv::Mat> frame_queue;                //Queue of frames for UDP stream.
+
+//Queue of read frames from camera.
+std::queue<cv::Mat,boost::circular_buffer<cv::Mat>> read_frame_queue(boost::circular_buffer<cv::Mat>(MAX_READ_QUEUE_SIZE));
 ```
-This is mostly self-explanatory. The UDP server relies on a queue of video frames which the main loop code pushes onto it. Thus, we have a producer-consumer problem which a condition variable can help with. See the [Appendix](#appendix) for more info about condition variables. Next let's take a look at the main function
+This is mostly self-explanatory. Grabbing camera frames relies on a shared circular queue that main loop constantly pulls from. Additionally, the UDP server relies on a queue of annotated frames which the main loop code pushes onto it. Thus, we have two producer-consumer problems which condition variables can help with. See the [Appendix](#appendix) for more info about condition variables. Next let's take a look at the main function
 
 ```cpp
 int main() {
@@ -150,11 +175,13 @@ int main() {
   Server server(io_context, 1234, m_data);
 
   //Launch the threads. Execution starts immediately
+  std::thread read_frame_th(read_frame);
   std::thread server_th([&]() {server.run();});
   std::thread udp_stream_th(udp_stream);
   std::thread main_loop_th(main_loop, std::ref(server));
 
   //Block until threads are done running. Prevent main from returning early.
+  read_frame_th.join();
   server_th.join();
   udp_stream_th.join();
   main_loop_th.join();
@@ -163,7 +190,66 @@ int main() {
 }
 ```
 
-The first two lines setup the server that sends counting data to clients. Note that the global variable mutex `m_data` is passed into its constructor. The next step is the creation of three threads. The `server_th` thread uses a lambda function (see [Appendix](#appendix)) since it is only one line of code.  The next thread `udp_stream_th` calls the `udp_stream` function. This is a live video feed of the camera with bounding boxes and counts. The final thread `main_loop_th` calls the `main_loop` function. This is the function that does inference, tracking, and other things. Finally `.join()` is called on each thread (again see [Appendix](#appendix))
+The first two lines setup the server that sends counting data to clients. Note that the global variable mutex `m_data` is passed into its constructor. The next step is the creation of three threads. The first thread `read_frame_th` calls the `read_frame` function that constantly pulls video frames from the Pi. The `server_th` thread uses a lambda function (see [Appendix](#appendix)) since it is only one line of code. The next thread `udp_stream_th` calls the `udp_stream` function. This is a live video feed of the camera with bounding boxes and counts. The final thread `main_loop_th` calls the `main_loop` function. This is the function that does inference, tracking, and other things. Finally `.join()` is called on each thread (again see [Appendix](#appendix))
+
+### Camera Reading Thread
+> [!IMPORTANT]  
+> This thread/function originally didn't exist. However, there was a consistent error that would pop up saying "reference in DPB was never decoded". This would cause a massive delay of around 1000ms or greater and would happen frequently. It turns out the fix was to grab frames as fast as possible with minimal delay. A possible reason is that the DPB (probably stands for decoded picture buffer) kept filling up to the max. Thus, not grabbing the frames off of this buffer may have triggered this warning. Existing sources are unhelpful about this error so this is all speculation.
+
+We have the following initialization lines. 
+```cpp
+const std::string pipeline = "udpsrc address=192.168.0.103 port=5000 ! application/x-rtp, payload=96, encoding-name=H264 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw, format=BGRx, width=640, height=480 ! videoconvert ! video/x-raw, format=BGR, width=640, height=480 ! appsink";
+
+cv::VideoCapture cap;
+cv::Mat frame;
+
+#ifdef NO_PI
+
+if(!cap.open(0)) {
+    std::cerr << "ERROR! Unable to open camera\n";
+    return;
+}
+
+cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
+cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
+
+#else
+
+if(!cap.open(pipeline, cv::CAP_GSTREAMER)) {
+    std::cerr << "ERROR! Unable to open camera\n";
+    return;
+}
+
+#endif
+
+std::cout << "Connected to camera\n";
+```
+
+The first line is fed into the `.open()` function of the `cv::VideoCapture` class (as seen under the `#else` directive). Notably, this is more complicated than a regular UDP url since we are using GStreamer as the backend for video instead of FFMPEG (it didn't work). Not much else is to be said as much of this was hacked together from examples online.
+
+Next we can look at the `while` loop.
+
+```cpp
+while(1) {
+
+    cap.read(frame);
+
+    {
+        std::lock_guard<std::mutex> l{m_read};
+        read_frame_queue.push(frame);
+    }
+
+    //Notify main_loop thread 
+    cond_read_var.notify_one();
+
+    if(end_program_flag) {
+        break;
+    }
+
+}
+```
+
+This is pretty straightforward. We read a video frame, lock a mutex `m_read`, push it onto a queue, notify the main loop of an item in the queue, and repeat.
 
 ### Server Thread
 The server thread uses a lambda function which only executes the following
@@ -221,39 +307,42 @@ This is similar to the condition variable code in the appendix. Once `cond_var` 
 The main loop function contains all the inference, and tracking code. First we take a look at the following lines
 ```cpp
 //For some reason relative paths don't work
-const std::string classes_file_path = "/home/nvidia/Desktop/fishCenSV2/coco-classes.txt";
-const std::string engine_file_path = "/home/nvidia/Desktop/fishCenSV2/yolov8n.engine";
-
-//Address is the Jetson's. This should always be the same address as configured by the router.
-const std::string pipeline = "udpsrc address=192.168.0.103 port=5000 ! application/x-rtp, payload=96, encoding-name=H264 ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! video/x-raw, format=BGRx, width=640, height=480 ! videoconvert ! video/x-raw, format=BGR, width=640, height=480 ! appsink";
+const std::string classes_file_path = "/home/nvidia/Desktop/fishCenSV2/coco-classes-fish.txt";
+const std::string engine_file_path = "/home/nvidia/Desktop/fishCenSV2/best_t21.engine";
 ```
 
-**IMPORTANT!** Change the filepaths if you are using different models. The `.txt` file should have each class separated line-by-line and be in the same order as the model (check Netron for order). For example, line one is index 0. You can see this in the `MODEL PROPERTIES` panel under `METADATA` and `names`.
+> [!IMPORTANT]  
+> Change the filepaths if you are using different models. The `.txt` file should have each class separated line-by-line and be in the same order as the model (check Netron for order). For example, line one is index 0. You can see this in the `MODEL PROPERTIES` panel under `METADATA` and `names`.
 
-The first two lines are for intializing the machine learning model and we can ignore it for now. The last line is fed into the `.open()` function of the `cv::VideoCapture` class. Notably, this is more complicated than a regular UDP url since we are using GStreamer as the backend for video instead of FFMPEG (it didn't work). Not much else is to be said as much of this was hacked together from examples online. 
+The first two lines are for intializing the machine learning model and we can ignore it for now. 
 
 Let us take a look at the next lines
 ```cpp
-constexpr int fps = 50; //FPS that tracker uses
+constexpr int fps = 20;
 
-//Right now it counts cellphones and anything else.
-//Of course this will be changed once the model is trained.
+//Counts of fish swimming left
 int left_count = 0;
-int l_cell_count = 0;
-int right_count = 0;
-int r_cell_count = 0;
+int l_chinook_count = 0;
+int l_chum_count = 0;
+int l_coho_count = 0;
+int l_sockeye_count = 0;
+int l_steelhead_count = 0;
 
-cv::VideoCapture cap;
-cv::Mat frame;
+//Counts of fish swimming right
+int right_count = 0;
+int r_chinook_count = 0;
+int r_chum_count = 0;
+int r_coho_count = 0;
+int r_sockeye_count = 0;
+int r_steelhead_count = 0;
 
 std::vector<Object> objects;                //Vector of bounding boxes
 std::vector<STrack> output_stracks;         //Vector of tracked objects
 std::unordered_map<int, int> previous_pos;  //Key = Track ID, Val = Previous Position
 
-Timer timer = Timer();         //Timer for measuring different processes execution time
-Timer timer_total = Timer();   //Timer for measuring total execution time
+util::StopWatch stopwatch = util::StopWatch();         //Timer for measuring different processes execution time
+util::StopWatch stopwatch_total = util::StopWatch();   //Timer for measuring total execution time
 
-//Construct the machine learning model with the two files from before
 YoloV8 detector(classes_file_path,engine_file_path);
 
 std::cout << "Initializing YoloV8 engine\n";
@@ -261,9 +350,10 @@ std::cout << "Initializing YoloV8 engine\n";
 detector.init();
 ```
 
-The first line sets the FPS for the tracking algorithm (initialization not seen here). The next couple lines are the left and right counts for the species. Left and right mean the direction of travel when crossing the middle of the screen At the moment this just counts cellphones and anything else that is not a cellphone.  The lines after that are just more setup and some will be brought up again later. Note that the second-to-last line constructs the machine learning detector using the two strings mentioned at the start.
+The first line sets the FPS for the tracking algorithm (initialization not seen here). The next couple lines are the left and right counts for the species. Left and right mean the direction of travel when crossing the middle of the screen. The lines after that are just more setup and some will be brought up again later. Note that the second-to-last line constructs the machine learning detector using the two strings mentioned at the start.
 
-NOTE: PLEASE look at the documentation for the yolo class [here](https://github.com/FishCenSV2/fishCenSV2/tree/main/libs/yolo). There is the possiblity that something may break due to using a different model.
+> [!IMPORTANT]
+> **PLEASE** look at the documentation for the yolo class [here](https://github.com/FishCenSV2/fishCenSV2/tree/main/libs/yolo). There is the possiblity that something may break due to using a different model.
 
 Next we have the following code
 ```cpp
@@ -271,35 +361,27 @@ Next we have the following code
 
 BYTETracker tracker(30,30);    
 
-if(!cap.open(1)) {
-  std::cerr << "ERROR! Unable to open camera\n";
-  return;
-}
-
-cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
-cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
-
 #else
 
 BYTETracker tracker(fps,30);    
 
-if(!cap.open(pipeline, cv::CAP_GSTREAMER)) {
-  std::cerr << "ERROR! Unable to open camera\n";
-  return;
-}
-
 #endif
 ```
 
-The `NO_PI` is used for simple webcam testing. We can see that for our normal operation we pass the GStreamer pipeline string from earlier into the the `.open()` function. 
+The `NO_PI` is used for simple webcam testing which can have different FPS than the Pi camera streaming.
 
-Next we move onto the `while` loop. Here I removed most of the timer code from the original since that just measures execution times.
+Next we move onto the `while` loop. Here I removed most of the timer and debug code from the original since that just measures execution times.
 
 ```cpp
 while(1) {
 
-  //Read frame from UDP stream
-  cap.read(frame);
+  //Read frame camera frame queue.
+  std::unique_lock<std::mutex> lock{m_read};
+  cond_read_var.wait(lock,[](){return end_program_flag || !read_frame_queue.empty();});
+
+  cv::Mat frame = read_frame_queue.front();
+  read_frame_queue.pop();
+  lock.unlock();
   
   if(frame.empty()) {
     std::cerr << "ERROR! Blank frame grabbed\n";
@@ -315,11 +397,12 @@ while(1) {
   //Run the model detection on the cv::Mat
   detector.predict(input);
   
-  //Post-process the model's detections to get a vector of bounding boxes
-  //The "2" is a multiplicative scaling factor since our model only takes in 
-  //320x320 images while the live feed is 640x640. Essentially we scale the
-  //bounding boxes to the proper dimensions.
-  objects = detector.postprocess(2);
+  /*Post-process the model's detections to get a vector of bounding boxes
+  The "1" is a multiplicative scaling factor since our model could have taken
+  in 320x320, 480x480, etc. images while the live feed is 640x640. Essentially we 
+  scale the bounding boxes to the proper dimensions.
+  */
+  objects = detector.postprocess(1);
   
   //Add padding to the original frame that the user will see.
   //We use this instead of the pre-processed one due to some changes made by the function.
@@ -330,7 +413,7 @@ while(1) {
 }
 ```
 
-This code is how steps 1) to 4) in the "How the Code Works" section work.  The detector's `.predict()` doesn't actually return the detections because we must find them from the raw output of TensorRT engine. Furthermore, I found it more useful to make `predict()` return nothing since we must do post-processing anyways. The post-processing returns a vector of bounding boxes which we assign to the variable `objects`. Recall that we previously had this variable declared as
+This code is how steps 1) to 4) in the "How the Code Works" section work. The code for reading from the queue is exactly the same as the UDP stream code. The detector's `.predict()` doesn't actually return the detections because we must find them from the raw output of TensorRT engine. Furthermore, I found it more useful to make `predict()` return nothing since we must do post-processing anyways. The post-processing returns a vector of bounding boxes which we assign to the variable `objects`. Recall that we previously had this variable declared as
 
 ```cpp
 std::vector<Object> objects;  //Vector of bounding boxes
@@ -373,24 +456,14 @@ if(output_stracks.size() > 0) {
       int previous_position = previous_pos[output_stracks[i].track_id];
   
       if(current_position - previous_position > 0 && previous_position < 320 && current_position >= 320) { {
-        if(detector.classes[objects[i].label] == "cell phone") {
-          r_cell_count++;
-        }
-  
-        else {
-          right_count++;
-        }
+        //Bunch of boilerplate counting code here. See the file for it.
+        //....
   
       }
   
       else if(current_position - previous_position < 0 && previous_position >= 320 && current_position < 320) {
-        if(detector.classes[objects[i].label] == "cell phone") {
-          l_cell_count++;
-        }
-  
-        else {
-          left_count++;
-        }
+        //Again, bunch of boilerplate counting code here. See the file for it.
+        //....
       }
 
       //Update the previous position to be the current position for the next video frame

@@ -1,7 +1,8 @@
 # YoloV8
 This documentation contains breakdowns of some (not all) of the functions used in the `YoloV8` class. Much of this is based the TensorRT documentation found [here](https://docs.nvidia.com/deeplearning/tensorrt/archives/tensorrt-821/quick-start-guide/index.html#run-engine-c) and also [here](https://docs.nvidia.com/deeplearning/tensorrt/archives/tensorrt-821/api/c_api/classnvinfer1_1_1_i_execution_context.html)
 
-**NOTE: This documentation does not cover training the actual machine learning model and exporting it to ONNX. Please see section [Training the Model](https://github.com/FishCenSV2/fishCenSV2/tree/main?tab=readme-ov-file#training-the-model) for this**
+> [!NOTE] 
+> This documentation does not cover training the actual machine learning model and exporting it to ONNX. Please see section [Training the Model](https://github.com/FishCenSV2/fishCenSV2/tree/main?tab=readme-ov-file#training-the-model) for this.
 
 ## Table of Contents
 - [YoloV8](#yolov8)
@@ -14,7 +15,8 @@ This documentation contains breakdowns of some (not all) of the functions used i
 
 ## Function Breakdowns
 
-**NOTE: The below assumes that the engine file already exists. To see how to create the engine file from the ONNX file please see the section [TensorRT Engine](https://github.com/FishCenSV2/fishCenSV2/tree/main?tab=readme-ov-file#tensorrt-engine).**
+> [!NOTE] 
+> The below assumes that the engine file already exists. To see how to create the engine file from the ONNX file please see the section [TensorRT Engine](https://github.com/FishCenSV2/fishCenSV2/tree/main?tab=readme-ov-file#tensorrt-engine).
 
 ### Initialization
 ---
@@ -79,7 +81,8 @@ _input_index = _engine->getBindingIndex("images");
 _output_index = _engine->getBindingIndex("output0");
 ```
 
-**IMPORTANT!** These strings might change depending on the model. In order to find the correct names you can drag-and-drop the ONNX model into [Netron](https://netron.app/). The following figure shows an example of what you should see at the very top.
+> [!IMPORTANT] 
+> These strings might change depending on the model. In order to find the correct names you can drag-and-drop the ONNX model into [Netron](https://netron.app/). The following figure shows an example of what you should see at the very top.
 
 <figure>
     <img src="../../assets/netron_layer.png"
@@ -102,7 +105,8 @@ const auto idims = _engine->getBindingDimensions(_input_index);
 const auto odims = _engine->getBindingDimensions(_output_index);
 ```
 
-**IMPORTANT!** Your model might have dynamic input sizing (which also means dynamic output sizing) which means your model can take any input size. This can be seen by the sign of `idims.d[0]` and `odims.d[0]` being negative. This is why we generally start from `idims.d[1]` or `odims.d[1]`. Netron may show the first dimension as `batch_size` which is most likely an indicator for this. In any case even if we do not run into this problem it is still good to know about it.
+> [!IMPORTANT] 
+>  Your model might have dynamic input sizing (which also means dynamic output sizing) which means your model can take any input size. This can be seen by the sign of `idims.d[0]` and `odims.d[0]` being negative. This is why we generally start from `idims.d[1]` or `odims.d[1]`. Netron may show the first dimension as `batch_size` which is most likely an indicator for this. In any case even if we do not run into this problem it is still good to know about it.
 
 The next part of the code finds the max output dimension and the total dimension length from `odims`.
 
@@ -144,7 +148,7 @@ The `_buffers` member variable is a `void*` buffer of size two. It stores the in
 The following shows the `preprocess` method.
 
 ```cpp
-cv::Mat YoloV8::preprocess(cv::Mat& image) {
+[[nodiscard]] cv::Mat YoloV8::preprocess(cv::Mat& image) {
     cv::Mat frame;
 
     //The padding is hardcoded based on an input of 640*480 so it will just
@@ -156,13 +160,17 @@ cv::Mat YoloV8::preprocess(cv::Mat& image) {
     this function to also do some other pre-processing like scaling
     the input to be between 0 and 1 instead of 0 and 255.
 
-    NOTE: The cv::Size(320,320) is also hardcoded based on the model.
-          This should realistically be determined using idims.d 
     */
-    return cv::dnn::blobFromImage(frame,1.0/255,cv::Size(320,320),cv::Scalar(0,0,0),true,false,CV_32F);
+
+    //    return cv::dnn::blobFromImage(frame,1.0/255,cv::Size(320,320),cv::Scalar(0,0,0),true,false,CV_32F);
+    //std::cout << frame.size() << std::endl;
+    return cv::dnn::blobFromImage(frame,1.0/255,cv::Size(640,640),cv::Scalar(0,0,0),false,false,CV_32F);
 
 }
 ```
+
+> [!IMPORTANT] 
+> The `cv::copyMakeBorder` is hardcoded based on the resolution received from the Gstreamer pipeline. Additionally, the `cv::Size(640,640)` in the `cv::dnn::blobFromImage` is also hardcoded based on the model. The former should be determined using some basic math. The latter should be determined using `idims.d`. Both **should** be changed for the future.
 
 The comments should make most of this clear. The `cv::dnn::blobFromImage` functions parameters are shown below. The output of this function should be directly passed to the `predict` function.
 
@@ -205,7 +213,7 @@ The output needs to be processed so the `postprocess` function **must** be calle
 The following shows the `postprocess` method.
 
 ```cpp
-std::vector<Object> YoloV8::postprocess(float scale_factor) {
+[[nodiscard]] std::vector<Object> YoloV8::postprocess(float scale_factor) {
 
     constexpr int class_offset = 4; //The first four numbers are the xywh
     std::vector<Object> objects;    //Final output vector for bounding boxes.
@@ -314,7 +322,8 @@ for(int col = 0; col < _max_out_dim; col++) {
 
 Once we have found the max score for a object we compare it to a threshold value and if it is greater than this threshold we add it to three vectors. The final step is to peform non-maximum suppression (NMS) to remove duplicate detections which returns a vector of indices that we store in `_indices`. The indices correspond to indices in the three vectors of objects that we should keep. For example, a vector containing indices 0,3,4 means we should use elements from _boxes[0], _boxes[3], _boxes[4], _class_ids[0], _class_ids[3], etc. 
 
-**NOTE**: You can change the score threshold and NMS threshold in the `yolov8.hpp` file on lines 65 and 66.
+> [!NOTE] 
+> You can change the score threshold and NMS threshold in the `yolov8.hpp` file on lines 65 and 66.
 
 Finally, we can use these elements from the three vectors to create a vector of bounding box objects. The objects are structs which contain the elements from the three vectors as shown below.
 
