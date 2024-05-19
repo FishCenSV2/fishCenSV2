@@ -32,6 +32,18 @@ if(this->removed_stracks.size() > 1000) {
 
 The next change of `vector<STrack> removed_stracks` from `private` to `public` was needed since the code in `main.cpp` needs to know the objects that aren't being tracked anymore and remove them from the previous positions map object. Otherwise, we would need to keep track of them on our own which is just reinventing the wheel since the tracker already does this.
 
+There is one more change that has no impact on the code but fixed an annoying issue. In `dataType.h` the following lines were added
+
+```cpp
+//This is only needed since Intellisense keeps putting namespace errors.
+#if __INTELLISENSE__
+#undef __ARM_NEON
+#undef __ARM_NEON__
+#endif
+```
+
+IntelliSense in VSCode was being annoying and kept yelling about namespace errors even though everything compiled fine. This is specifically due to the eigen3 library and the fix was from [here](https://github.com/microsoft/vscode-cpptools/issues/7413).
+
 ## Code Explanations
 This section attempts to explain a few details that would have overcrowded the `main.cpp` code overview.
 
